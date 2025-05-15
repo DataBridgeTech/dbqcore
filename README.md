@@ -1,2 +1,2 @@
-# dbq-core
+# dbqcore
 DataBridge Quality Core library
