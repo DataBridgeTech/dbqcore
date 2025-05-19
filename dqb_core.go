@@ -1,9 +1,9 @@
 package dbqcore
 
 const (
-	DbqCoreLibVersion = "0.0.1"
+	Version = "0.0.1"
 )
 
-func GetDbqVersion() string {
-	return DbqCoreLibVersion
+func GetDbqCoreLibVersion() string {
+	return Version
 }
