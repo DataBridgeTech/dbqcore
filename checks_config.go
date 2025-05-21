@@ -14,6 +14,11 @@
 
 package dbqcore
 
+import (
+	"gopkg.in/yaml.v3"
+	"os"
+)
+
 type OnFailAction string
 
 const (
@@ -37,4 +42,20 @@ type Check struct {
 	Description string       `yaml:"description,omitempty"` // optional
 	OnFail      OnFailAction `yaml:"on_fail,omitempty"`     // optional (error, warn)
 	Query       string       `yaml:"query,omitempty"`       // optional raw query
+}
+
+func LoadChecksConfig(fileName string) (*ChecksConfig, error) {
+	file, err := os.Open(fileName)
+	defer file.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg ChecksConfig
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }
