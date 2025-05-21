@@ -78,17 +78,15 @@ func (c *ClickhouseDbqConnector) ImportDatasets(filter string) ([]string, error)
         where 
             database not in ('system', 'INFORMATION_SCHEMA', 'information_schema')
 			and not startsWith(name, '.')
-			and is_temporary = 0;`
+			and is_temporary = 0`
 
-	var args []interface{}
-	filter = strings.TrimSpace(filter)
+	filter = fmt.Sprintf("%%%s%%", strings.TrimSpace(filter))
 	if filter != "" {
-		query += ` and name LIKE ?`
-		args = append(args, "%"+filter+"%")
+		query += fmt.Sprintf(` and (database like '%s' or name like '%s')`, filter, filter)
 	}
 	query += ` order by database, name;`
 
-	rows, err := c.cnn.Query(context.Background(), query, args)
+	rows, err := c.cnn.Query(context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query system.tables: %w", err)
 	}
