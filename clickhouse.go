@@ -18,7 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"io"
 	"log/slog"
 	"reflect"
 	"regexp"
@@ -30,10 +30,11 @@ import (
 )
 
 type ClickhouseDbqConnector struct {
-	cnn driver.Conn
+	cnn    driver.Conn
+	logger *slog.Logger
 }
 
-func NewClickhouseDbqConnector(dataSource DataSource) (DbqConnector, error) {
+func NewClickhouseDbqConnector(dataSource DataSource, logger *slog.Logger) (DbqConnector, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{dataSource.Configuration.Host},
 		Auth: clickhouse.Auth{
@@ -46,8 +47,14 @@ func NewClickhouseDbqConnector(dataSource DataSource) (DbqConnector, error) {
 		//},
 	})
 
+	if logger == nil {
+		// noop logger by default
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	return &ClickhouseDbqConnector{
-		cnn: conn,
+		cnn:    conn,
+		logger: logger,
 	}, err
 }
 
@@ -66,17 +73,20 @@ func (c *ClickhouseDbqConnector) ImportDatasets(filter string) ([]string, error)
 	}
 
 	query := `
-        SELECT database, name
-        FROM system.tables
-        WHERE database NOT IN ('system', 'information_schema', 'INFORMATION_SCHEMA')`
+        select database, name
+        from system.tables
+        where 
+            database not in ('system', 'INFORMATION_SCHEMA', 'information_schema')
+			and not startsWith(name, '.')
+			and is_temporary = 0;`
 
 	var args []interface{}
 	filter = strings.TrimSpace(filter)
 	if filter != "" {
-		query += ` AND name LIKE ?`
+		query += ` and name LIKE ?`
 		args = append(args, "%"+filter+"%")
 	}
-	query += ` ORDER BY database, name;`
+	query += ` order by database, name;`
 
 	rows, err := c.cnn.Query(context.Background(), query, args)
 	if err != nil {
@@ -118,15 +128,11 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 		ColumnsMetrics: make(map[string]*ColumnMetrics),
 	}
 
-	slog.Debug("Calculating metrics for table:", dataset)
-
 	// Total Row Count
-	slog.Debug("Fetching total row count...")
-	err := c.cnn.QueryRow(ctx, fmt.Sprintf("SELECT count() FROM %s", dataset)).Scan(&metrics.TotalRows)
+	err := c.cnn.QueryRow(ctx, fmt.Sprintf("select count() from %s", dataset)).Scan(&metrics.TotalRows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total row count for %s: %w", dataset, err)
 	}
-	slog.Debug("Total rows: %d", metrics.TotalRows)
 
 	// sample data if enabled
 	if sample {
@@ -137,7 +143,9 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 
 		rows, err := c.cnn.Query(toCtx, sampleQuery)
 		if err != nil {
-			log.Printf("Warning: Failed to sample data %s: %v", err)
+			c.logger.Warn("failed to sample data",
+				"dataset", tableName,
+				"error", err.Error())
 		}
 		defer rows.Close()
 
@@ -152,7 +160,7 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 
 			err = rows.Scan(scanArgs...)
 			if err != nil {
-				log.Printf("Warning: Failed to scan row: %v", err)
+				c.logger.Warn("failed to scan row", "error", err)
 				continue
 			}
 
@@ -175,17 +183,20 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 	}
 
 	if len(columnsToProcess) == 0 {
-		slog.Warn("Warning: No columns found for table %s. Returning basic info.", dataset)
+		c.logger.Warn("no columns found for table", dataset, ", returning basic info")
 		metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
 		return metrics, nil
 	}
 
-	log.Printf("Found %d columns to process.", len(columnsToProcess))
+	c.logger.Debug(fmt.Sprintf("found %d columns to process", len(columnsToProcess)))
 
 	// Calculate Metrics per Column
 	for _, col := range columnsToProcess {
 		colStartTime := time.Now()
-		log.Printf("Processing column: %s (Type: %s)", col.Name, col.Type)
+		c.logger.Debug("start column processing",
+			"col_name", col.Name,
+			"col_type", col.Type)
+
 		colMetrics := &ColumnMetrics{
 			ColumnName:     col.Name,
 			DataType:       col.Type,
@@ -197,7 +208,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 		nullQuery := fmt.Sprintf("select count() from %s where isNull(%s)", dataset, col.Name)
 		err = c.cnn.QueryRow(ctx, nullQuery).Scan(&colMetrics.NullCount)
 		if err != nil {
-			log.Printf("Warning: Failed to get NULL count for column %s: %v", col.Name, err)
+			c.logger.Warn("failed to get NULL count",
+				"error", err.Error(),
+				"col_name", col.Name,
+				"col_type", col.Type)
 		}
 
 		// Blank Count (String types only)
@@ -206,7 +220,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 			var blankCount uint64
 			err = c.cnn.QueryRow(ctx, blankQuery).Scan(&blankCount)
 			if err != nil {
-				log.Printf("Warning: Failed to get blank count for string column %s: %v", col.Name, err)
+				c.logger.Warn("failed to get blank count for column",
+					"error", err.Error(),
+					"col_name", col.Name,
+					"col_type", col.Type)
 				colMetrics.BlankCount = nil
 			} else {
 				val := int64(blankCount)
@@ -238,7 +255,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 			)
 
 			if err != nil {
-				log.Printf("Warning: Failed to get numeric aggregates for column %s: %v", col.Name, err)
+				c.logger.Warn("failed to get numeric aggregates for column",
+					"error", err.Error(),
+					"col_name", col.Name,
+					"col_type", col.Type)
 			} else {
 				if minValue.Valid {
 					colMetrics.MinValue = &minValue.Float64
@@ -262,7 +282,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 		mfvQuery := fmt.Sprintf("SELECT CAST(arrayElement(topK(1)(%s), 1), 'Nullable(String)') FROM %s", col.Name, dataset)
 		err = c.cnn.QueryRow(ctx, mfvQuery).Scan(&colMetrics.MostFrequentValue)
 		if err != nil {
-			log.Printf("Warning: Failed to get most frequent value for column %s: %v", col.Name, err)
+			c.logger.Warn("failed to get most frequent value for column",
+				"error", err.Error(),
+				"col_name", col.Name,
+				"col_type", col.Type)
 			colMetrics.MostFrequentValue = nil
 		}
 
@@ -270,11 +293,15 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool) (*T
 		colMetrics.ProfilingDurationMs = elapsed
 
 		metrics.ColumnsMetrics[col.Name] = colMetrics
-		log.Printf("Finished column: %s in %d ms", col.Name, elapsed)
+		c.logger.Debug("finished processing column",
+			"col_name", col.Name,
+			"proc_duration_ms", elapsed)
 	}
 
 	metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
-	log.Printf("Finished calculating all metrics for %s in %d ms", dataset, metrics.ProfilingDurationMs)
+	c.logger.Debug("finished data profiling for table",
+		"dataset", dataset,
+		"profile_duration_ms", metrics.ProfilingDurationMs)
 
 	return metrics, nil
 }
@@ -284,21 +311,26 @@ func (c *ClickhouseDbqConnector) RunCheck(check *Check, dataset string, defaultW
 		return false, "", fmt.Errorf("database connection is not initialized")
 	}
 
-	query, err := generateDataCheckQuery(check, dataset, defaultWhere)
+	query, err := generateDataCheckQuery(check, dataset, defaultWhere, c.logger)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %s", check.ID, dataset, err.Error())
 	}
 
-	// todo: debug
-	// log.Printf("Executing SQL for '%s': %s", check.ID, query)
+	c.logger.Debug("executing query for check",
+		"check_id", check.ID,
+		"query", query)
 
-	// startTime := time.Now()
+	startTime := time.Now()
 	rows, err := c.cnn.Query(context.Background(), query)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to query database: %w", err)
 	}
 	defer rows.Close()
-	// _ := time.Since(startTime).Milliseconds()
+	elapsed := time.Since(startTime).Milliseconds()
+
+	c.logger.Debug("query completed in time",
+		"check_id", check.ID,
+		"duration_ms", elapsed)
 
 	var checkPassed bool
 	for rows.Next() {
@@ -345,7 +377,7 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	return cols, nil
 }
 
-func generateDataCheckQuery(check *Check, dataset string, whereClause string) (string, error) {
+func generateDataCheckQuery(check *Check, dataset string, whereClause string, logger *slog.Logger) (string, error) {
 	var sqlQuery string
 
 	// handle raw_query first
@@ -377,6 +409,7 @@ func generateDataCheckQuery(check *Check, dataset string, whereClause string) (s
 		return "", fmt.Errorf("invalid format for check: %s", check.ID)
 	}
 
+	// todo: extract matcher to make it DataSource agnostic
 	switch {
 	case strings.HasPrefix(check.ID, "row_count"):
 		checkExpression = strings.Replace(check.ID, "row_count", "count()", 1)
@@ -405,7 +438,8 @@ func generateDataCheckQuery(check *Check, dataset string, whereClause string) (s
 	default:
 		// assume the ID itself is a valid boolean expression if no specific pattern matches
 		// this is less robust but covers simple cases
-		log.Printf("Warning: Check ID '%s' did not match known check patterns. Assuming it's a direct SQL boolean expression.", check.ID)
+		logger.Warn("Check did not match known check patterns. Assuming it's a direct SQL boolean expression",
+			"check_id", check.ID)
 		checkExpression = check.ID
 	}
 
