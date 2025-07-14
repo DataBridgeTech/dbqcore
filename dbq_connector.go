@@ -17,7 +17,7 @@ package dbqcore
 type DbqConnector interface {
 	Ping() (string, error)
 	ImportDatasets(filter string) ([]string, error)
-	ProfileDataset(dataset string, sample bool) (*TableMetrics, error)
+	ProfileDataset(dataset string, sample bool, maxConcurrent int) (*TableMetrics, error)
 	RunCheck(check *Check, dataset string, defaultWhere string) (bool, string, error)
 }
 
@@ -55,8 +55,4 @@ type ColumnInfo struct {
 	Type     string
 	Comment  string
 	Position uint
-}
-
-type ProfileResultOutput struct {
-	Profiles map[string]*TableMetrics `json:"profiles"`
 }
