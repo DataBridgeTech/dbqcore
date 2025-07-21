@@ -123,6 +123,7 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 		tableName = strings.TrimSpace(parts[1])
 	}
 
+	var metricsLock sync.Mutex
 	metrics := &TableMetrics{
 		ProfiledAt:     time.Now().Unix(),
 		TableName:      tableName,
@@ -316,6 +317,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 		go func() {
 			colWg.Wait()
 			elapsed := time.Since(colStartTime).Milliseconds()
+
+			metricsLock.Lock()
+			defer metricsLock.Unlock()
+
 			colMetrics.ProfilingDurationMs = elapsed
 			metrics.ColumnsMetrics[col.Name] = colMetrics
 			c.logger.Debug("finished processing column",
@@ -324,10 +329,12 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 		}()
 	}
 
-	// todo: add timeout, errors collection & cancellation
+	// todo: add timeout & cancellation
 	taskPool.Join()
 
 	metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
+	metrics.DbqErrors = taskPool.Errors()
+
 	c.logger.Debug("finished data profiling for table",
 		"dataset", dataset,
 		"profile_duration_ms", metrics.ProfilingDurationMs)

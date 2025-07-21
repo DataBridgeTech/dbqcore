@@ -48,6 +48,7 @@ type TableMetrics struct {
 	ColumnsMetrics      map[string]*ColumnMetrics `json:"columns_metrics"`
 	RowsSample          []map[string]interface{}  `json:"rows_sample"`
 	ProfilingDurationMs int64                     `json:"profiling_duration_ms"`
+	DbqErrors           []error                   `json:"_dbq_errors"`
 }
 
 type ColumnInfo struct {

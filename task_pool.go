@@ -25,6 +25,8 @@ type TaskPool struct {
 	semaphore chan struct{}
 	logger    *slog.Logger
 	wg        sync.WaitGroup
+	mu        sync.Mutex
+	errors    []error
 }
 
 func NewTaskPool(poolSize int, logger *slog.Logger) *TaskPool {
@@ -50,7 +52,12 @@ func (tp *TaskPool) Enqueue(id string, task func() error) {
 
 		tp.logger.Debug("executing task", "task_id", id)
 		exeStartTime := time.Now()
-		_ = task() // todo: error handling
+		if err := task(); err != nil {
+			tp.logger.Error("task failed", "task_id", id, "error", err.Error())
+			tp.mu.Lock()
+			tp.errors = append(tp.errors, err)
+			tp.mu.Unlock()
+		}
 		elapsed := time.Since(exeStartTime).Milliseconds()
 		tp.logger.Debug("completed task", "task_id", id, "elapsed_ms", elapsed)
 	}()
@@ -58,4 +65,13 @@ func (tp *TaskPool) Enqueue(id string, task func() error) {
 
 func (tp *TaskPool) Join() {
 	tp.wg.Wait()
+}
+
+func (tp *TaskPool) Errors() []error {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+
+	errsCopy := make([]error, len(tp.errors))
+	copy(errsCopy, tp.errors)
+	return errsCopy
 }
