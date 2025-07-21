@@ -132,7 +132,7 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 	}
 
 	// Total Row Count
-	err := c.cnn.QueryRow(ctx, fmt.Sprintf("select count() from %s", dataset)).Scan(&metrics.TotalRows)
+	err := c.cnn.QueryRow(ctx, fmt.Sprintf("select count() as row_count from %s", dataset)).Scan(&metrics.TotalRows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total row count for %s: %w", dataset, err)
 	}
@@ -148,8 +148,6 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 		metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
 		return metrics, nil
 	}
-
-	//
 
 	c.logger.Debug(fmt.Sprintf("found %d columns to process", len(columnsToProcess)))
 
@@ -218,23 +216,41 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 
 		// Null Count (all types)
 		enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"null_count", func() error {
-			nullQuery := fmt.Sprintf("select count() from %s where isNull(%s)", dataset, col.Name)
-			err := c.cnn.QueryRow(ctx, nullQuery).Scan(&colMetrics.NullCount)
+			nullQuery := fmt.Sprintf("select count() as null_count from %s where isNull(%s)", dataset, col.Name)
+			rows, err := c.cnn.Query(ctx, nullQuery)
+			defer rows.Close()
+
 			if err != nil {
 				c.logger.Warn("failed to get NULL count",
 					"error", err.Error(),
 					"col_name", col.Name,
 					"col_type", col.Type)
+			} else {
+				for rows.Next() {
+					var nullCount uint64
+					if err = rows.Scan(&nullCount); err != nil {
+						c.logger.Warn("failed to scan nulls count",
+							"error", err.Error(),
+							"col_name", col.Name,
+							"col_type", col.Type)
+					} else {
+						colMetrics.NullCount = nullCount
+					}
+				}
 			}
+
 			return err
 		})
 
 		// Blank Count (String types only)
 		if isStringCHType(col.Type) {
 			enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"blank_count", func() error {
-				blankQuery := fmt.Sprintf("select count() from %s where empty(%s)", dataset, col.Name)
+				blankQuery := fmt.Sprintf("select count() as blank_count from %s where empty(%s)", dataset, col.Name)
+
 				var blankCount uint64
-				err := c.cnn.QueryRow(ctx, blankQuery).Scan(&blankCount)
+				rows, err := c.cnn.Query(ctx, blankQuery)
+				defer rows.Close()
+
 				if err != nil {
 					c.logger.Warn("failed to get blank count for column",
 						"error", err.Error(),
@@ -242,9 +258,19 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 						"col_type", col.Type)
 					colMetrics.BlankCount = nil
 				} else {
-					val := int64(blankCount)
-					colMetrics.BlankCount = &val
+					for rows.Next() {
+						if err = rows.Scan(&blankCount); err != nil {
+							c.logger.Warn("failed to scan blank count",
+								"error", err.Error(),
+								"col_name", col.Name,
+								"col_type", col.Type)
+						} else {
+							val := int64(blankCount)
+							colMetrics.BlankCount = &val
+						}
+					}
 				}
+
 				return err
 			})
 		}
@@ -255,10 +281,10 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 				// todo: check null handling
 				numericQuery := fmt.Sprintf(`
                 select
-                    min(%s),
-                    max(%s),
-                    avg(%s),
-                    stddevPop(%s)
+                    min(%s) as min_value,
+                    max(%s) as max_value,
+                    avg(%s) as avg_value,
+                    stddevPop(%s) as stddev_value
                 from %s`, col.Name, col.Name, col.Name, col.Name, dataset)
 
 				var minValue sql.NullFloat64
@@ -266,12 +292,8 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 				var avgValue sql.NullFloat64
 				var stddevValue sql.NullFloat64
 
-				err := c.cnn.QueryRow(ctx, numericQuery).Scan(
-					&minValue,
-					&maxValue,
-					&avgValue,
-					&stddevValue,
-				)
+				rows, err := c.cnn.Query(ctx, numericQuery)
+				defer rows.Close()
 
 				if err != nil {
 					c.logger.Warn("failed to get numeric aggregates for column",
@@ -279,17 +301,27 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 						"col_name", col.Name,
 						"col_type", col.Type)
 				} else {
-					if minValue.Valid {
-						colMetrics.MinValue = &minValue.Float64
-					}
-					if maxValue.Valid {
-						colMetrics.MaxValue = &maxValue.Float64
-					}
-					if avgValue.Valid {
-						colMetrics.AvgValue = &avgValue.Float64
-					}
-					if stddevValue.Valid {
-						colMetrics.StddevValue = &stddevValue.Float64
+					for rows.Next() {
+						err = rows.Scan(&minValue, &maxValue, &avgValue, &stddevValue)
+						if err != nil {
+							c.logger.Warn("failed to scan numeric aggregates",
+								"error", err.Error(),
+								"col_name", col.Name,
+								"col_type", col.Type)
+						} else {
+							if minValue.Valid {
+								colMetrics.MinValue = &minValue.Float64
+							}
+							if maxValue.Valid {
+								colMetrics.MaxValue = &maxValue.Float64
+							}
+							if avgValue.Valid {
+								colMetrics.AvgValue = &avgValue.Float64
+							}
+							if stddevValue.Valid {
+								colMetrics.StddevValue = &stddevValue.Float64
+							}
+						}
 					}
 				}
 
@@ -302,15 +334,35 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 		// It handles NULL correctly. CAST to String for consistent retrieval.
 		// Note: If the most frequent value is NULL, it should be represented correctly by sql.NullString
 		enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"mfv", func() error {
-			mfvQuery := fmt.Sprintf("SELECT CAST(arrayElement(topK(1)(%s), 1), 'Nullable(String)') FROM %s", col.Name, dataset)
-			err := c.cnn.QueryRow(ctx, mfvQuery).Scan(&colMetrics.MostFrequentValue)
+			mfvQuery := fmt.Sprintf("select cast(arrayElement(topK(1)('%s'), 1), 'Nullable(String)') as mfv from %s", col.Name, dataset)
+			rows, err := c.cnn.Query(ctx, mfvQuery)
 			if err != nil {
-				c.logger.Warn("failed to get most frequent value for column",
+				c.logger.Error("failed to get most frequent value for column",
 					"error", err.Error(),
 					"col_name", col.Name,
-					"col_type", col.Type)
+					"col_type", col.Type,
+					"raw_query", mfvQuery)
 				colMetrics.MostFrequentValue = nil
 			}
+			defer rows.Close()
+
+			for rows.Next() {
+				var mfv sql.NullString
+				if err := rows.Scan(&mfv); err != nil {
+					c.logger.Error("failed to scan most frequent value",
+						"error", err.Error(),
+						"col_name", col.Name,
+						"col_type", col.Type)
+					return err
+				} else {
+					if mfv.Valid {
+						colMetrics.MostFrequentValue = &mfv.String
+					} else {
+						colMetrics.MostFrequentValue = nil
+					}
+				}
+			}
+
 			return err
 		})
 
