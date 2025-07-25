@@ -57,3 +57,10 @@ type ColumnInfo struct {
 	Comment  string
 	Position uint
 }
+
+type ValidationResult struct {
+	CheckID      string `json:"check_id"`
+	Pass         bool   `json:"pass"`
+	ActualResult string `json:"actual_result,omitempty"`
+	Message      string `json:"message,omitempty"`
+}
