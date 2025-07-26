@@ -1,18 +1,4 @@
-// Copyright 2025 The DBQ Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package dbqcore
+package profilers
 
 import (
 	"context"
@@ -21,100 +7,34 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/DataBridgeTech/dbqcore"
 )
 
-type ClickhouseDbqConnector struct {
+type ClickhouseDbqDataProfiler struct {
 	cnn    driver.Conn
 	logger *slog.Logger
 }
 
-func NewClickhouseDbqConnector(dataSource DataSource, logger *slog.Logger) (DbqConnector, error) {
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{dataSource.Configuration.Host},
-		Auth: clickhouse.Auth{
-			Database: dataSource.Configuration.Database,
-			Username: dataSource.Configuration.Username,
-			Password: dataSource.Configuration.Password,
-		},
-		MaxOpenConns: 32,
-		MaxIdleConns: 32,
-		//TLS: &tls.Config{
-		//	InsecureSkipVerify: true,
-		//},
-	})
-
+func NewClickhouseDbqDataProfiler(cnn driver.Conn, logger *slog.Logger) dbqcore.DbqDataProfiler {
 	if logger == nil {
-		// noop logger by default
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	return &ClickhouseDbqConnector{
-		cnn:    conn,
+	return &ClickhouseDbqDataProfiler{
+		cnn:    cnn,
 		logger: logger,
-	}, err
+	}
 }
 
-func (c *ClickhouseDbqConnector) Ping() (string, error) {
-	info, err := c.cnn.ServerVersion()
-	if err != nil {
-		return "", err
-	}
-
-	return info.String(), nil
-}
-
-func (c *ClickhouseDbqConnector) ImportDatasets(filter string) ([]string, error) {
-	if c.cnn == nil {
-		return nil, fmt.Errorf("database connection is not initialized")
-	}
-
-	query := `
-        select database, name
-        from system.tables
-        where 
-            database not in ('system', 'INFORMATION_SCHEMA', 'information_schema')
-			and not startsWith(name, '.')
-			and is_temporary = 0`
-
-	filter = fmt.Sprintf("%%%s%%", strings.TrimSpace(filter))
-	if filter != "" {
-		query += fmt.Sprintf(` and (database like '%s' or name like '%s')`, filter, filter)
-	}
-	query += ` order by database, name;`
-
-	rows, err := c.cnn.Query(context.Background(), query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query system.tables: %w", err)
-	}
-	defer rows.Close()
-
-	var datasets []string
-	for rows.Next() {
-		var databaseName, tableName string
-		if err := rows.Scan(&databaseName, &tableName); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		datasets = append(datasets, fmt.Sprintf("%s.%s", databaseName, tableName))
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error occurred during row iteration: %w", err)
-	}
-
-	return datasets, nil
-}
-
-func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, maxConcurrent int) (*TableMetrics, error) {
+func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
 	startTime := time.Now()
 	ctx := context.Background()
-	taskPool := NewTaskPool(maxConcurrent, c.logger)
+	taskPool := dbqcore.NewTaskPool(maxConcurrent, c.logger)
 
 	var databaseName, tableName string
 	parts := strings.SplitN(dataset, ".", 2)
@@ -124,11 +44,11 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 	}
 
 	var metricsLock sync.Mutex
-	metrics := &TableMetrics{
+	metrics := &dbqcore.TableMetrics{
 		ProfiledAt:     time.Now().Unix(),
 		TableName:      tableName,
 		DatabaseName:   databaseName,
-		ColumnsMetrics: make(map[string]*ColumnMetrics),
+		ColumnsMetrics: make(map[string]*dbqcore.ColumnMetrics),
 	}
 
 	// Total Row Count
@@ -205,7 +125,7 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 			"col_name", col.Name,
 			"col_type", col.Type)
 
-		colMetrics := &ColumnMetrics{
+		colMetrics := &dbqcore.ColumnMetrics{
 			ColumnName:     col.Name,
 			DataType:       col.Type,
 			ColumnComment:  col.Comment,
@@ -394,55 +314,7 @@ func (c *ClickhouseDbqConnector) ProfileDataset(dataset string, sample bool, max
 	return metrics, nil
 }
 
-func enqueueColumnTask(taskPool *TaskPool, subsetWg *sync.WaitGroup, taskId string, task func() error) {
-	subsetWg.Add(1)
-	taskPool.Enqueue(taskId, func() error {
-		defer subsetWg.Done()
-		return task()
-	})
-}
-
-func (c *ClickhouseDbqConnector) RunCheck(check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
-	if c.cnn == nil {
-		return false, "", fmt.Errorf("database connection is not initialized")
-	}
-
-	query, err := generateDataCheckQuery(check, dataset, defaultWhere, c.logger)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %s", check.ID, dataset, err.Error())
-	}
-
-	c.logger.Debug("executing query for check",
-		"check_id", check.ID,
-		"query", query)
-
-	startTime := time.Now()
-	rows, err := c.cnn.Query(context.Background(), query)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to query database: %w", err)
-	}
-	defer rows.Close()
-	elapsed := time.Since(startTime).Milliseconds()
-
-	c.logger.Debug("query completed in time",
-		"check_id", check.ID,
-		"duration_ms", elapsed)
-
-	var checkPassed bool
-	for rows.Next() {
-		if err := rows.Scan(&checkPassed); err != nil {
-			return false, "", fmt.Errorf("failed to scan row: %w", err)
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return false, "", fmt.Errorf("error occurred during row iteration: %w", err)
-	}
-
-	return checkPassed, "", nil
-}
-
-func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tableName string) ([]ColumnInfo, error) {
+func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tableName string) ([]dbqcore.ColumnInfo, error) {
 	columnQuery := `
         SELECT name, type, comment, position
         FROM system.columns
@@ -455,14 +327,14 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	}
 	defer rows.Close()
 
-	var cols []ColumnInfo
+	var cols []dbqcore.ColumnInfo
 	for rows.Next() {
 		var colName, colType, comment string
 		var pos uint64
 		if err := rows.Scan(&colName, &colType, &comment, &pos); err != nil {
 			return nil, fmt.Errorf("failed to scan column info: %w", err)
 		}
-		cols = append(cols, ColumnInfo{Name: colName, Type: colType, Comment: comment, Position: uint(pos)})
+		cols = append(cols, dbqcore.ColumnInfo{Name: colName, Type: colType, Comment: comment, Position: uint(pos)})
 	}
 
 	if err = rows.Err(); err != nil {
@@ -471,80 +343,6 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	rows.Close()
 
 	return cols, nil
-}
-
-func generateDataCheckQuery(check *DataQualityCheck, dataset string, whereClause string, logger *slog.Logger) (string, error) {
-	var sqlQuery string
-
-	// handle raw_query first
-	if check.ID == CheckTypeRawQuery {
-		if check.Query == "" {
-			return "", fmt.Errorf("check with id 'raw_query' requires a 'query' field")
-		}
-
-		sqlQuery = strings.ReplaceAll(check.Query, "{{table}}", dataset)
-		if whereClause != "" {
-			// todo: more sophisticated check is needed
-			if strings.Contains(strings.ToLower(sqlQuery), " where ") {
-				sqlQuery = fmt.Sprintf("%s and (%s)", sqlQuery, whereClause)
-			} else {
-				sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
-			}
-		}
-
-		return sqlQuery, nil
-	}
-
-	isAggFunction := startWithAnyOf([]string{
-		"min", "max", "avg", "stddevPop", "sum",
-	}, strings.ToLower(check.ID))
-
-	var checkExpression string
-	parts := strings.Fields(check.ID)
-	if len(parts) < 3 {
-		return "", fmt.Errorf("invalid format for check: %s", check.ID)
-	}
-
-	// todo: extract matcher to make it DataSource agnostic
-	switch {
-	case strings.HasPrefix(check.ID, "row_count"):
-		checkExpression = strings.Replace(check.ID, "row_count", "count()", 1)
-
-	case strings.HasPrefix(check.ID, "null_count"):
-		re := regexp.MustCompile(`^null_count\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.ID)
-		if len(matches) < 3 {
-			return "", fmt.Errorf("invalid format for null_count check: %s", check.ID)
-		}
-
-		column := matches[1]
-		remainder := matches[2]
-		checkExpression = fmt.Sprintf("countIf(isNull(%s))%s", column, remainder)
-
-	case isAggFunction:
-		re := regexp.MustCompile(`^(min|max|avg|stddevPop|sum)\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.ID)
-		if len(matches) < 3 {
-			fmt.Println(matches, " --- ", len(matches))
-			return "", fmt.Errorf("invalid format for aggregation function check: %s", check.ID)
-		}
-
-		checkExpression = matches[0]
-
-	default:
-		// assume the ID itself is a valid boolean expression if no specific pattern matches
-		// this is less robust but covers simple cases
-		logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
-			"check_id", check.ID)
-		checkExpression = check.ID
-	}
-
-	sqlQuery = fmt.Sprintf("select %s from %s", checkExpression, dataset)
-	if whereClause != "" {
-		sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
-	}
-
-	return sqlQuery, nil
 }
 
 // isNumericCHType checks if a ClickHouse data type string represents a numeric type
@@ -565,11 +363,10 @@ func isStringCHType(dataType string) bool {
 		strings.HasPrefix(dataType, "fixedstring")
 }
 
-func startWithAnyOf(prefixes []string, s string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, strings.ToLower(prefix)) {
-			return true
-		}
-	}
-	return false
+func enqueueColumnTask(taskPool *dbqcore.TaskPool, subsetWg *sync.WaitGroup, taskId string, task func() error) {
+	subsetWg.Add(1)
+	taskPool.Enqueue(taskId, func() error {
+		defer subsetWg.Done()
+		return task()
+	})
 }

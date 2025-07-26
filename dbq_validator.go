@@ -14,7 +14,19 @@
 
 package dbqcore
 
-type DbqConnector interface {
-	Ping() (string, error)
-	ImportDatasets(filter string) ([]string, error)
+type DataQualityCheckType string
+
+const (
+	CheckTypeRawQuery = "raw_query"
+)
+
+type DbqDataValidator interface {
+	RunCheck(check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error)
+}
+
+type ValidationResult struct {
+	CheckID      string `json:"check_id"`
+	Pass         bool   `json:"pass"`
+	ActualResult string `json:"actual_result,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
