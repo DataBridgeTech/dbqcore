@@ -27,13 +27,13 @@ type DbqConfig struct {
 }
 
 type DataSource struct {
-	ID            string         `yaml:"id"`
-	Type          DataSourceType `yaml:"type"`
-	Configuration ConfigDetails  `yaml:"configuration"`
-	Datasets      []string       `yaml:"datasets"`
+	ID            string           `yaml:"id"`
+	Type          DataSourceType   `yaml:"type"`
+	Configuration ConnectionConfig `yaml:"configuration"`
+	Datasets      []string         `yaml:"datasets"`
 }
 
-type ConfigDetails struct {
+type ConnectionConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`

@@ -31,7 +31,6 @@ type TaskPool struct {
 
 func NewTaskPool(poolSize int, logger *slog.Logger) *TaskPool {
 	if logger == nil {
-		// noop logger by default
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 

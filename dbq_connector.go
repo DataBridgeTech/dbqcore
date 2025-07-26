@@ -14,11 +14,12 @@
 
 package dbqcore
 
+// DbqConnector todo: separate profiler and validator
 type DbqConnector interface {
 	Ping() (string, error)
 	ImportDatasets(filter string) ([]string, error)
 	ProfileDataset(dataset string, sample bool, maxConcurrent int) (*TableMetrics, error)
-	RunCheck(check *Check, dataset string, defaultWhere string) (bool, string, error)
+	RunCheck(check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error)
 }
 
 const (

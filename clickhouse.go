@@ -402,7 +402,7 @@ func enqueueColumnTask(taskPool *TaskPool, subsetWg *sync.WaitGroup, taskId stri
 	})
 }
 
-func (c *ClickhouseDbqConnector) RunCheck(check *Check, dataset string, defaultWhere string) (bool, string, error) {
+func (c *ClickhouseDbqConnector) RunCheck(check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
 	if c.cnn == nil {
 		return false, "", fmt.Errorf("database connection is not initialized")
 	}
@@ -473,7 +473,7 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	return cols, nil
 }
 
-func generateDataCheckQuery(check *Check, dataset string, whereClause string, logger *slog.Logger) (string, error) {
+func generateDataCheckQuery(check *DataQualityCheck, dataset string, whereClause string, logger *slog.Logger) (string, error) {
 	var sqlQuery string
 
 	// handle raw_query first
@@ -534,7 +534,7 @@ func generateDataCheckQuery(check *Check, dataset string, whereClause string, lo
 	default:
 		// assume the ID itself is a valid boolean expression if no specific pattern matches
 		// this is less robust but covers simple cases
-		logger.Warn("Check did not match known check patterns. Assuming it's a direct SQL boolean expression",
+		logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
 			"check_id", check.ID)
 		checkExpression = check.ID
 	}
