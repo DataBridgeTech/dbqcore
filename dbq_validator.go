@@ -14,16 +14,23 @@
 
 package dbqcore
 
+import "context"
+
+// DataQualityCheckType represents the type of data quality check.
 type DataQualityCheckType string
 
 const (
+	// CheckTypeRawQuery is a data quality check that uses a raw SQL query.
 	CheckTypeRawQuery = "raw_query"
 )
 
+// DbqDataValidator is the interface that wraps the basic data validation methods.
 type DbqDataValidator interface {
-	RunCheck(check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error)
+	// RunCheck runs a data quality check and returns the result.
+	RunCheck(ctx context.Context, check *DataQualityCheck, dataset string, defaultWhere string) (bool, string, error)
 }
 
+// ValidationResult represents the result of a data quality check.
 type ValidationResult struct {
 	CheckID      string `json:"check_id"`
 	Pass         bool   `json:"pass"`

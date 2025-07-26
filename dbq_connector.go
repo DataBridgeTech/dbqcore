@@ -14,7 +14,13 @@
 
 package dbqcore
 
+import "context"
+
+// DbqConnector is the interface that wraps the basic connector methods.
 type DbqConnector interface {
-	Ping() (string, error)
-	ImportDatasets(filter string) ([]string, error)
+	// Ping checks if the connection to the data source is alive.
+	Ping(ctx context.Context) (string, error)
+
+	// ImportDatasets imports datasets from the data source, with an optional filter.
+	ImportDatasets(ctx context.Context, filter string) ([]string, error)
 }

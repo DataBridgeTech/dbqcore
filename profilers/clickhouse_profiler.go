@@ -1,3 +1,17 @@
+// Copyright 2025 The DBQ Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package profilers
 
 import (
@@ -31,9 +45,9 @@ func NewClickhouseDbqDataProfiler(cnn driver.Conn, logger *slog.Logger) dbqcore.
 	}
 }
 
-func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
+// ProfileDataset analyzes a given dataset (table) and returns detailed metrics about its columns.
+func (c *ClickhouseDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
 	startTime := time.Now()
-	ctx := context.Background()
 	taskPool := dbqcore.NewTaskPool(maxConcurrent, c.logger)
 
 	var databaseName, tableName string
@@ -58,13 +72,13 @@ func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, 
 	}
 
 	// Get Column Information (Name and Type)
-	columnsToProcess, err := fetchColumns(c.cnn, ctx, databaseName, tableName)
+	columnsToProcess, err := fetchColumns(ctx, c.cnn, c.logger, databaseName, tableName)
 	if err != nil {
 		return metrics, err
 	}
 
 	if len(columnsToProcess) == 0 {
-		c.logger.Warn("no columns found for table", dataset, ", returning basic info")
+		c.logger.Warn("no columns found for table", "dataset", dataset, ", returning basic info")
 		metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
 		return metrics, nil
 	}
@@ -76,7 +90,7 @@ func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, 
 		taskPool.Enqueue("task:sampling", func() error {
 			sampleQuery := fmt.Sprintf("select * from %s.%s order by rand() limit 100", databaseName, tableName)
 
-			toCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			toCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
 			rows, err := c.cnn.Query(toCtx, sampleQuery)
@@ -84,8 +98,14 @@ func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, 
 				c.logger.Warn("failed to sample data",
 					"dataset", tableName,
 					"error", err.Error())
+				return nil
 			}
-			defer rows.Close()
+
+			defer func() {
+				if closeErr := rows.Close(); closeErr != nil {
+					c.logger.Warn("failed to close rows", "error", closeErr)
+				}
+			}()
 
 			var allRows []map[string]interface{}
 			for rows.Next() {
@@ -111,197 +131,197 @@ func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, 
 				allRows = append(allRows, rowData)
 			}
 
+			if err := rows.Err(); err != nil {
+				c.logger.Warn("error iterating sample rows", "error", err)
+				return err
+			}
+
+			metricsLock.Lock()
 			metrics.RowsSample = allRows
-			return err
+			metricsLock.Unlock()
+
+			return nil
 		})
 	}
 
 	// Calculate Metrics per Column
 	for _, col := range columnsToProcess {
+		column := col
 		var colWg sync.WaitGroup
+		var colMetricsLock sync.Mutex
 		colStartTime := time.Now()
 
 		c.logger.Debug("start column processing",
-			"col_name", col.Name,
-			"col_type", col.Type)
+			"col_name", column.Name,
+			"col_type", column.Type)
 
 		colMetrics := &dbqcore.ColumnMetrics{
-			ColumnName:     col.Name,
-			DataType:       col.Type,
-			ColumnComment:  col.Comment,
-			ColumnPosition: col.Position,
+			ColumnName:     column.Name,
+			DataType:       column.Type,
+			ColumnComment:  column.Comment,
+			ColumnPosition: column.Position,
 		}
 
-		taskIdPrefix := fmt.Sprintf("task:%s:", col.Name)
+		taskIdPrefix := fmt.Sprintf("task:%s:", column.Name)
 
 		// Null Count (all types)
 		enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"null_count", func() error {
-			nullQuery := fmt.Sprintf("select count() as null_count from %s where isNull(%s)", dataset, col.Name)
-			rows, err := c.cnn.Query(ctx, nullQuery)
-			defer rows.Close()
+			nullQuery := fmt.Sprintf("select count() as null_count from %s where isNull(%s)", dataset, column.Name)
 
+			rows, err := c.cnn.Query(ctx, nullQuery)
 			if err != nil {
-				c.logger.Warn("failed to get NULL count",
-					"error", err.Error(),
-					"col_name", col.Name,
-					"col_type", col.Type)
-			} else {
-				for rows.Next() {
-					var nullCount uint64
-					if err = rows.Scan(&nullCount); err != nil {
-						c.logger.Warn("failed to scan nulls count",
-							"error", err.Error(),
-							"col_name", col.Name,
-							"col_type", col.Type)
-					} else {
-						colMetrics.NullCount = nullCount
-					}
+				c.logger.Warn("failed to get NULL count", "error", err.Error(), "col_name", column.Name)
+				return err
+			}
+
+			defer func() {
+				if err := rows.Close(); err != nil {
+					c.logger.Warn("failed to close rows", "error", err)
+				}
+			}()
+
+			if rows.Next() {
+				var nullCount uint64
+				if err = rows.Scan(&nullCount); err != nil {
+					c.logger.Warn("failed to scan nulls count", "error", err.Error(), "col_name", column.Name)
+				} else {
+					colMetricsLock.Lock()
+					colMetrics.NullCount = nullCount
+					colMetricsLock.Unlock()
 				}
 			}
 
-			return err
+			return rows.Err()
 		})
 
 		// Blank Count (String types only)
-		if isStringCHType(col.Type) {
+		if isStringCHType(column.Type) {
 			enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"blank_count", func() error {
-				blankQuery := fmt.Sprintf("select count() as blank_count from %s where empty(%s)", dataset, col.Name)
+				blankQuery := fmt.Sprintf("select count() as blank_count from %s where empty(%s)", dataset, column.Name)
 
-				var blankCount uint64
 				rows, err := c.cnn.Query(ctx, blankQuery)
-				defer rows.Close()
-
 				if err != nil {
-					c.logger.Warn("failed to get blank count for column",
-						"error", err.Error(),
-						"col_name", col.Name,
-						"col_type", col.Type)
-					colMetrics.BlankCount = nil
-				} else {
-					for rows.Next() {
-						if err = rows.Scan(&blankCount); err != nil {
-							c.logger.Warn("failed to scan blank count",
-								"error", err.Error(),
-								"col_name", col.Name,
-								"col_type", col.Type)
-						} else {
-							val := int64(blankCount)
-							colMetrics.BlankCount = &val
-						}
+					c.logger.Warn("failed to get blank count", "error", err.Error(), "col_name", column.Name)
+					return err
+				}
+
+				defer func() {
+					if err := rows.Close(); err != nil {
+						c.logger.Warn("failed to close rows", "error", err)
+					}
+				}()
+
+				if rows.Next() {
+					var blankCount uint64
+					if err = rows.Scan(&blankCount); err != nil {
+						c.logger.Warn("failed to scan blank count", "error", err.Error(), "col_name", column.Name)
+					} else {
+						val := int64(blankCount)
+						colMetricsLock.Lock()
+						colMetrics.BlankCount = &val
+						colMetricsLock.Unlock()
 					}
 				}
 
-				return err
+				return rows.Err()
 			})
 		}
 
 		// Numeric Metrics (Numeric types only)
-		if isNumericCHType(col.Type) {
+		if isNumericCHType(column.Type) {
 			enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"num_stats", func() error {
-				// todo: check null handling
 				numericQuery := fmt.Sprintf(`
-                select
-                    min(%s) as min_value,
-                    max(%s) as max_value,
-                    avg(%s) as avg_value,
-                    stddevPop(%s) as stddev_value
-                from %s`, col.Name, col.Name, col.Name, col.Name, dataset)
-
-				var minValue sql.NullFloat64
-				var maxValue sql.NullFloat64
-				var avgValue sql.NullFloat64
-				var stddevValue sql.NullFloat64
+                select min(%s), max(%s), avg(%s), stddevPop(%s) from %s`,
+					column.Name, column.Name, column.Name, column.Name, dataset)
 
 				rows, err := c.cnn.Query(ctx, numericQuery)
-				defer rows.Close()
-
 				if err != nil {
-					c.logger.Warn("failed to get numeric aggregates for column",
-						"error", err.Error(),
-						"col_name", col.Name,
-						"col_type", col.Type)
-				} else {
-					for rows.Next() {
-						err = rows.Scan(&minValue, &maxValue, &avgValue, &stddevValue)
-						if err != nil {
-							c.logger.Warn("failed to scan numeric aggregates",
-								"error", err.Error(),
-								"col_name", col.Name,
-								"col_type", col.Type)
-						} else {
-							if minValue.Valid {
-								colMetrics.MinValue = &minValue.Float64
-							}
-							if maxValue.Valid {
-								colMetrics.MaxValue = &maxValue.Float64
-							}
-							if avgValue.Valid {
-								colMetrics.AvgValue = &avgValue.Float64
-							}
-							if stddevValue.Valid {
-								colMetrics.StddevValue = &stddevValue.Float64
-							}
+					c.logger.Warn("failed to get numeric aggregates", "error", err.Error(), "col_name", column.Name)
+					return err
+				}
+
+				defer func() {
+					if err := rows.Close(); err != nil {
+						c.logger.Warn("failed to close rows", "error", err)
+					}
+				}()
+
+				if rows.Next() {
+					var minValue, maxValue, avgValue, stddevValue sql.NullFloat64
+					if err = rows.Scan(&minValue, &maxValue, &avgValue, &stddevValue); err != nil {
+						c.logger.Warn("failed to scan numeric aggregates", "error", err.Error(), "col_name", column.Name)
+					} else {
+						colMetricsLock.Lock()
+						if minValue.Valid {
+							colMetrics.MinValue = &minValue.Float64
 						}
+						if maxValue.Valid {
+							colMetrics.MaxValue = &maxValue.Float64
+						}
+						if avgValue.Valid {
+							colMetrics.AvgValue = &avgValue.Float64
+						}
+						if stddevValue.Valid {
+							colMetrics.StddevValue = &stddevValue.Float64
+						}
+						colMetricsLock.Unlock()
 					}
 				}
 
-				return err
+				return rows.Err()
 			})
 		}
 
-		// Most Frequent Value (all types - using topK)
-		// topK(1) returns an array, we need to extract the first element if it exists
-		// It handles NULL correctly. CAST to String for consistent retrieval.
-		// Note: If the most frequent value is NULL, it should be represented correctly by sql.NullString
+		// Most Frequent Value
 		enqueueColumnTask(taskPool, &colWg, taskIdPrefix+"mfv", func() error {
-			mfvQuery := fmt.Sprintf("select cast(arrayElement(topK(1)('%s'), 1), 'Nullable(String)') as mfv from %s", col.Name, dataset)
+			mfvQuery := fmt.Sprintf("select cast(arrayElement(topK(1)(%s), 1), 'Nullable(String)') as mfv from %s", column.Name, dataset)
+
 			rows, err := c.cnn.Query(ctx, mfvQuery)
 			if err != nil {
-				c.logger.Error("failed to get most frequent value for column",
-					"error", err.Error(),
-					"col_name", col.Name,
-					"col_type", col.Type,
-					"raw_query", mfvQuery)
-				colMetrics.MostFrequentValue = nil
+				c.logger.Warn("failed to get most frequent value", "error", err.Error(), "col_name", column.Name)
+				return err
 			}
-			defer rows.Close()
 
-			for rows.Next() {
+			defer func() {
+				if err := rows.Close(); err != nil {
+					c.logger.Warn("failed to close rows", "error", err)
+				}
+			}()
+
+			if rows.Next() {
 				var mfv sql.NullString
 				if err := rows.Scan(&mfv); err != nil {
-					c.logger.Error("failed to scan most frequent value",
-						"error", err.Error(),
-						"col_name", col.Name,
-						"col_type", col.Type)
-					return err
+					c.logger.Warn("failed to scan most frequent value", "error", err.Error(), "col_name", column.Name)
 				} else {
+					colMetricsLock.Lock()
 					if mfv.Valid {
 						colMetrics.MostFrequentValue = &mfv.String
 					} else {
 						colMetrics.MostFrequentValue = nil
 					}
+					colMetricsLock.Unlock()
 				}
 			}
 
-			return err
+			return rows.Err()
 		})
 
 		go func() {
+			// Wait for all metric-gathering tasks for the current column to complete
 			colWg.Wait()
-			elapsed := time.Since(colStartTime).Milliseconds()
+			colMetrics.ProfilingDurationMs = time.Since(colStartTime).Milliseconds()
 
 			metricsLock.Lock()
-			defer metricsLock.Unlock()
+			metrics.ColumnsMetrics[column.Name] = colMetrics
+			metricsLock.Unlock()
 
-			colMetrics.ProfilingDurationMs = elapsed
-			metrics.ColumnsMetrics[col.Name] = colMetrics
 			c.logger.Debug("finished processing column",
-				"col_name", col.Name,
-				"proc_duration_ms", elapsed)
+				"col_name", column.Name,
+				"proc_duration_ms", colMetrics.ProfilingDurationMs)
 		}()
 	}
 
-	// todo: add timeout & cancellation
+	// Wait for all tasks (sampling and all column metrics) to finish.
 	taskPool.Join()
 
 	metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
@@ -314,7 +334,7 @@ func (c *ClickhouseDbqDataProfiler) ProfileDataset(dataset string, sample bool, 
 	return metrics, nil
 }
 
-func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tableName string) ([]dbqcore.ColumnInfo, error) {
+func fetchColumns(ctx context.Context, cnn driver.Conn, logger *slog.Logger, databaseName string, tableName string) ([]dbqcore.ColumnInfo, error) {
 	columnQuery := `
         SELECT name, type, comment, position
         FROM system.columns
@@ -325,7 +345,12 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch columns info for %s.%s: %w", databaseName, tableName, err)
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logger.Warn("failed to close rows", "error", err)
+		}
+	}()
 
 	var cols []dbqcore.ColumnInfo
 	for rows.Next() {
@@ -345,10 +370,8 @@ func fetchColumns(cnn driver.Conn, ctx context.Context, databaseName string, tab
 	return cols, nil
 }
 
-// isNumericCHType checks if a ClickHouse data type string represents a numeric type
-// that supports standard aggregate functions like min, max, avg, stddev
+// isNumericCHType checks if a ClickHouse data type string represents a numeric type.
 func isNumericCHType(dataType string) bool {
-	// Basic check, might need additional refinement
 	dataType = strings.ToLower(dataType)
 	return strings.HasPrefix(dataType, "int") ||
 		strings.HasPrefix(dataType, "uint") ||
@@ -356,7 +379,7 @@ func isNumericCHType(dataType string) bool {
 		strings.HasPrefix(dataType, "decimal")
 }
 
-// isStringCHType checks if a ClickHouse data type is a string type
+// isStringCHType checks if a ClickHouse data type is a string type.
 func isStringCHType(dataType string) bool {
 	dataType = strings.ToLower(dataType)
 	return strings.HasPrefix(dataType, "string") ||

@@ -15,7 +15,7 @@
 package dbqcore
 
 const (
-	Version = "v0.0.7"
+	Version = "v0.1.0"
 )
 
 func GetDbqCoreLibVersion() string {

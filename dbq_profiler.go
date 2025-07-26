@@ -14,10 +14,15 @@
 
 package dbqcore
 
+import "context"
+
+// DbqDataProfiler is the interface that wraps the basic data profiling methods.
 type DbqDataProfiler interface {
-	ProfileDataset(dataset string, sample bool, maxConcurrent int) (*TableMetrics, error)
+	// ProfileDataset profiles a dataset and returns its metrics.
+	ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*TableMetrics, error)
 }
 
+// TableMetrics represents the metrics of a table.
 type TableMetrics struct {
 	ProfiledAt          int64                     `json:"profiled_at"`
 	TableName           string                    `json:"table_name"`
@@ -29,6 +34,7 @@ type TableMetrics struct {
 	DbqErrors           []error                   `json:"_dbq_errors"`
 }
 
+// ColumnMetrics represents the metrics of a column.
 type ColumnMetrics struct {
 	ColumnName          string   `json:"col_name"`
 	ColumnComment       string   `json:"col_comment"`
@@ -44,6 +50,7 @@ type ColumnMetrics struct {
 	ProfilingDurationMs int64    `json:"profiling_duration_ms"`
 }
 
+// ColumnInfo represents the basic information of a column.
 type ColumnInfo struct {
 	Name     string
 	Type     string

@@ -41,7 +41,7 @@ func NewClickhouseDbqConnector(cnn driver.Conn, logger *slog.Logger) dbqcore.Dbq
 	}
 }
 
-func (c *ClickhouseDbqConnector) Ping() (string, error) {
+func (c *ClickhouseDbqConnector) Ping(ctx context.Context) (string, error) {
 	serverVersion, err := c.cnn.ServerVersion()
 	if err != nil {
 		return "", err
@@ -50,7 +50,7 @@ func (c *ClickhouseDbqConnector) Ping() (string, error) {
 	return serverVersion.String(), nil
 }
 
-func (c *ClickhouseDbqConnector) ImportDatasets(filter string) ([]string, error) {
+func (c *ClickhouseDbqConnector) ImportDatasets(ctx context.Context, filter string) ([]string, error) {
 	query := `
         select database, name
         from system.tables
@@ -59,17 +59,24 @@ func (c *ClickhouseDbqConnector) ImportDatasets(filter string) ([]string, error)
 			and not startsWith(name, '.')
 			and is_temporary = 0`
 
-	filter = fmt.Sprintf("%%%s%%", strings.TrimSpace(filter))
+	var args []interface{}
 	if filter != "" {
-		query += fmt.Sprintf(` and (database like '%s' or name like '%s')`, filter, filter)
+		query += ` and (database like ? or name like ?)`
+		filter = fmt.Sprintf("%%%s%%", strings.TrimSpace(filter))
+		args = append(args, filter, filter)
 	}
-	query += ` order by database, name;`
+	query += ` order by database, name`
 
-	rows, err := c.cnn.Query(context.Background(), query)
+	rows, err := c.cnn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query system.tables: %w", err)
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			c.logger.Warn("failed to close rows", "error", err)
+		}
+	}()
 
 	var datasets []string
 	for rows.Next() {

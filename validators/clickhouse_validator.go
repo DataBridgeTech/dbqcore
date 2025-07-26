@@ -28,14 +28,14 @@ func NewClickhouseDbqDataValidator(cnn driver.Conn, logger *slog.Logger) dbqcore
 	}
 }
 
-func (c *ClickhouseDbqDataValidator) RunCheck(check *dbqcore.DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
+func (c *ClickhouseDbqDataValidator) RunCheck(ctx context.Context, check *dbqcore.DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
 	if c.cnn == nil {
 		return false, "", fmt.Errorf("database connection is not initialized")
 	}
 
 	query, err := generateDataCheckQuery(check, dataset, defaultWhere, c.logger)
 	if err != nil {
-		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %s", check.ID, dataset, err.Error())
+		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %w", check.ID, dataset, err)
 	}
 
 	c.logger.Debug("executing query for check",
@@ -43,7 +43,7 @@ func (c *ClickhouseDbqDataValidator) RunCheck(check *dbqcore.DataQualityCheck, d
 		"query", query)
 
 	startTime := time.Now()
-	rows, err := c.cnn.Query(context.Background(), query)
+	rows, err := c.cnn.Query(ctx, query)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to query database: %w", err)
 	}
