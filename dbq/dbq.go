@@ -33,7 +33,7 @@ func GetDbqCoreLibVersion() string {
 	return Version
 }
 
-func NewDbqConnector(dataSource dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqConnector, error) {
+func NewDbqConnector(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqConnector, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
 		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
@@ -48,7 +48,7 @@ func NewDbqConnector(dataSource dbqcore.DataSource, logger *slog.Logger) (dbqcor
 	}
 }
 
-func NewDbqProfiler(dataSource dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataProfiler, error) {
+func NewDbqProfiler(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataProfiler, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
 		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
@@ -63,7 +63,7 @@ func NewDbqProfiler(dataSource dbqcore.DataSource, logger *slog.Logger) (dbqcore
 	}
 }
 
-func NewDbqValidator(dataSource dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataValidator, error) {
+func NewDbqValidator(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataValidator, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
 		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
