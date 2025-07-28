@@ -33,9 +33,9 @@ func NewMysqlDbqDataProfiler(db *sql.DB, logger *slog.Logger) dbqcore.DbqDataPro
 	return &MysqlDbqDataProfiler{db: db, logger: logger}
 }
 
-func (p *MysqlDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
+func (p *MysqlDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int, collectErrors bool) (*dbqcore.TableMetrics, error) {
 	baseProfiler := NewBaseProfiler(p, p.logger)
-	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, true)
+	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, collectErrors)
 }
 
 func (p *MysqlDbqDataProfiler) GetColumns(ctx context.Context, schemaName string, tableName string) ([]*dbqcore.ColumnInfo, error) {

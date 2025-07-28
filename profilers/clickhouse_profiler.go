@@ -44,9 +44,9 @@ func NewClickhouseDbqDataProfiler(cnn driver.Conn, logger *slog.Logger) dbqcore.
 	}
 }
 
-func (c *ClickhouseDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
+func (c *ClickhouseDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int, collectErrors bool) (*dbqcore.TableMetrics, error) {
 	baseProfiler := NewBaseProfiler(c, c.logger)
-	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, true)
+	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, collectErrors)
 }
 
 func (c *ClickhouseDbqDataProfiler) GetColumns(ctx context.Context, databaseName string, tableName string) ([]*dbqcore.ColumnInfo, error) {

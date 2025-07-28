@@ -40,9 +40,9 @@ func NewPostgresqlDbqDataProfiler(db *sql.DB, logger *slog.Logger) dbqcore.DbqDa
 	}
 }
 
-func (p *PostgresqlDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*dbqcore.TableMetrics, error) {
+func (p *PostgresqlDbqDataProfiler) ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int, collectErrors bool) (*dbqcore.TableMetrics, error) {
 	baseProfiler := NewBaseProfiler(p, p.logger)
-	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, true)
+	return baseProfiler.ProfileDataset(ctx, dataset, sample, maxConcurrent, collectErrors)
 }
 
 func (p *PostgresqlDbqDataProfiler) GetColumns(ctx context.Context, schemaName string, tableName string) ([]*dbqcore.ColumnInfo, error) {

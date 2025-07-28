@@ -36,4 +36,5 @@ type ValidationResult struct {
 	Pass         bool   `json:"pass"`
 	ActualResult string `json:"actual_result,omitempty"`
 	Message      string `json:"message,omitempty"`
+	Error        string `json:"error,omitempty"`
 }

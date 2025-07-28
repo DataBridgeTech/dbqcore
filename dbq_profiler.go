@@ -20,7 +20,7 @@ import "context"
 type DbqDataProfiler interface {
 	// ProfileDataset is an entry point that runs profiling process by tying all specific profiling calls together
 	// todo: consider extracting it into separate entity
-	ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int) (*TableMetrics, error)
+	ProfileDataset(ctx context.Context, dataset string, sample bool, maxConcurrent int, collectErrors bool) (*TableMetrics, error)
 
 	GetColumns(ctx context.Context, databaseName string, tableName string) ([]*ColumnInfo, error)
 	GetTotalRows(ctx context.Context, dataset string) (uint64, error)
