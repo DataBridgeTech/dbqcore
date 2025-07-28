@@ -19,6 +19,7 @@ type DataSourceType string
 const (
 	DataSourceTypeClickhouse DataSourceType = "clickhouse"
 	DataSourceTypePostgresql DataSourceType = "postgresql"
+	DataSourceTypeMysql      DataSourceType = "mysql"
 )
 
 type DbqConfig struct {

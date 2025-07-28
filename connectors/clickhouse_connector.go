@@ -17,7 +17,6 @@ package connectors
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -31,14 +30,7 @@ type ClickhouseDbqConnector struct {
 }
 
 func NewClickhouseDbqConnector(cnn driver.Conn, logger *slog.Logger) dbqcore.DbqConnector {
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
-	return &ClickhouseDbqConnector{
-		cnn:    cnn,
-		logger: logger,
-	}
+	return &ClickhouseDbqConnector{cnn: cnn, logger: logger}
 }
 
 func (c *ClickhouseDbqConnector) Ping(ctx context.Context) (string, error) {

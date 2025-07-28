@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	Version = "v0.2.0"
+	Version = "v0.3.0"
 )
 
 func GetDbqCoreLibVersion() string {
@@ -47,6 +47,12 @@ func NewDbqConnector(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqco
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
 		return connectors.NewPostgresqlDbqConnector(connection, logger), nil
+	case dbqcore.DataSourceTypeMysql:
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
+		}
+		return connectors.NewMysqlDbqConnector(connection, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported data source type: %s", dataSource.Type)
 	}
@@ -66,6 +72,12 @@ func NewDbqProfiler(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcor
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
 		return profilers.NewPostgresqlDbqDataProfiler(connection, logger), nil
+	case dbqcore.DataSourceTypeMysql:
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
+		}
+		return profilers.NewMysqlDbqDataProfiler(connection, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported data source type: %s", dataSource.Type)
 	}
@@ -85,6 +97,12 @@ func NewDbqValidator(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqco
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
 		return validators.NewPostgresqlDbqDataValidator(connection, logger), nil
+	case dbqcore.DataSourceTypeMysql:
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
+		}
+		return validators.NewMysqlDbqDataValidator(connection, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported data source type: %s", dataSource.Type)
 	}
