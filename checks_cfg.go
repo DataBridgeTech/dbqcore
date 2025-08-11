@@ -28,15 +28,16 @@ package dbqcore
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import (
-	"gopkg.in/yaml.v3"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
-type OnFailAction string
+type OnErrorAction string
 
 const (
-	OnFailActionError   OnFailAction = "error"
-	OnFailActionWarning OnFailAction = "warn"
+	OnErrorActionIgnore OnErrorAction = "ignore"
+	OnErrorActionAlert  OnErrorAction = "alert"
 )
 
 type ChecksFileConfig struct {
@@ -51,10 +52,10 @@ type ValidationRule struct {
 }
 
 type DataQualityCheck struct {
-	ID          string       `yaml:"id"`
-	Description string       `yaml:"description,omitempty"` // optional
-	OnFail      OnFailAction `yaml:"on_fail,omitempty"`     // optional (error, warn)
-	Query       string       `yaml:"query,omitempty"`       // optional raw query
+	ID          string        `yaml:"id"`
+	Description string        `yaml:"description,omitempty"` // optional
+	OnError     OnErrorAction `yaml:"on_error,omitempty"`    // optional (pass - default, fail)
+	Query       string        `yaml:"query,omitempty"`       // optional raw query
 }
 
 func LoadChecksFileConfig(fileName string) (*ChecksFileConfig, error) {
