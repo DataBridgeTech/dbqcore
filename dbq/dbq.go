@@ -19,36 +19,36 @@ import (
 	"log/slog"
 
 	"github.com/DataBridgeTech/dbqcore"
+	"github.com/DataBridgeTech/dbqcore/adapters"
 	"github.com/DataBridgeTech/dbqcore/cnn"
 	"github.com/DataBridgeTech/dbqcore/connectors"
 	"github.com/DataBridgeTech/dbqcore/profilers"
-	"github.com/DataBridgeTech/dbqcore/validators"
 )
 
 const (
-	Version = "v0.4.0"
+	Version = "v0.5.0"
 )
 
 func GetDbqCoreLibVersion() string {
 	return Version
 }
 
-func NewDbqConnector(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqConnector, error) {
+func NewDbqConnector(dataSource *dbqcore.DataSource, poolSize int, logger *slog.Logger) (dbqcore.DbqConnector, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
-		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
+		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create clickhouse connection: %w", err)
 		}
 		return connectors.NewClickhouseDbqConnector(connection, logger), nil
 	case dbqcore.DataSourceTypePostgresql:
-		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
 		return connectors.NewPostgresqlDbqConnector(connection, logger), nil
 	case dbqcore.DataSourceTypeMysql:
-		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
 		}
@@ -58,22 +58,22 @@ func NewDbqConnector(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqco
 	}
 }
 
-func NewDbqProfiler(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataProfiler, error) {
+func NewDbqProfiler(dataSource *dbqcore.DataSource, poolSize int, logger *slog.Logger) (dbqcore.DbqDataProfiler, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
-		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
+		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create clickhouse connection: %w", err)
 		}
 		return profilers.NewClickhouseDbqDataProfiler(connection, logger), nil
 	case dbqcore.DataSourceTypePostgresql:
-		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
 		return profilers.NewPostgresqlDbqDataProfiler(connection, logger), nil
 	case dbqcore.DataSourceTypeMysql:
-		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
 		}
@@ -83,26 +83,26 @@ func NewDbqProfiler(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcor
 	}
 }
 
-func NewDbqValidator(dataSource *dbqcore.DataSource, logger *slog.Logger) (dbqcore.DbqDataValidator, error) {
+func NewDbqAdapter(dataSource *dbqcore.DataSource, poolSize int, logger *slog.Logger) (dbqcore.DbqDataSourceAdapter, error) {
 	switch dataSource.Type {
 	case dbqcore.DataSourceTypeClickhouse:
-		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration)
+		connection, err := cnn.NewClickhouseConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create clickhouse connection: %w", err)
 		}
-		return validators.NewClickhouseDbqDataValidator(connection, logger), nil
+		return adapters.NewClickhouseDbqDataSourceAdapter(connection, logger), nil
 	case dbqcore.DataSourceTypePostgresql:
-		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewPostgresqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create postgresql connection: %w", err)
 		}
-		return validators.NewPostgresqlDbqDataValidator(connection, logger), nil
+		return adapters.NewPostgresqlDbqDataSourceAdapter(connection, logger), nil
 	case dbqcore.DataSourceTypeMysql:
-		connection, err := cnn.NewMysqlConnection(dataSource.Configuration)
+		connection, err := cnn.NewMysqlConnection(dataSource.Configuration, poolSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create mysql connection: %w", err)
 		}
-		return validators.NewMysqlDbqDataValidator(connection, logger), nil
+		return adapters.NewMysqlDbqDataSourceAdapter(connection, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported data source type: %s", dataSource.Type)
 	}

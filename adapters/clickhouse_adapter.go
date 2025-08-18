@@ -1,74 +1,49 @@
-package validators
+// Copyright 2025 The DBQ Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package adapters
 
 import (
 	"context"
 	"fmt"
-	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/DataBridgeTech/dbqcore"
 	"io"
 	"log/slog"
 	"regexp"
 	"strings"
-	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/DataBridgeTech/dbqcore"
+	"github.com/DataBridgeTech/dbqcore/utils"
 )
 
-type ClickhouseDbqDataValidator struct {
+type ClickhouseDbqDataSourceAdapter struct {
 	cnn    driver.Conn
 	logger *slog.Logger
 }
 
-func NewClickhouseDbqDataValidator(cnn driver.Conn, logger *slog.Logger) dbqcore.DbqDataValidator {
+func NewClickhouseDbqDataSourceAdapter(cnn driver.Conn, logger *slog.Logger) dbqcore.DbqDataSourceAdapter {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	return &ClickhouseDbqDataValidator{
+	return &ClickhouseDbqDataSourceAdapter{
 		cnn:    cnn,
 		logger: logger,
 	}
 }
 
-func (c *ClickhouseDbqDataValidator) RunCheck(ctx context.Context, check *dbqcore.DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
-	if c.cnn == nil {
-		return false, "", fmt.Errorf("database connection is not initialized")
-	}
-
-	query, err := generateDataCheckQuery(check, dataset, defaultWhere, c.logger)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %w", check.ID, dataset, err)
-	}
-
-	c.logger.Debug("executing query for check",
-		"check_id", check.ID,
-		"query", query)
-
-	startTime := time.Now()
-	rows, err := c.cnn.Query(ctx, query)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to query database: %w", err)
-	}
-	defer rows.Close()
-	elapsed := time.Since(startTime).Milliseconds()
-
-	c.logger.Debug("query completed in time",
-		"check_id", check.ID,
-		"duration_ms", elapsed)
-
-	var checkPassed bool
-	for rows.Next() {
-		if err := rows.Scan(&checkPassed); err != nil {
-			return false, "", fmt.Errorf("failed to scan row: %w", err)
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return false, "", fmt.Errorf("error occurred during row iteration: %w", err)
-	}
-
-	return checkPassed, "", nil
-}
-
-func generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whereClause string, logger *slog.Logger) (string, error) {
+func (a *ClickhouseDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
 	var sqlQuery string
 
 	// handle raw_query first
@@ -90,7 +65,7 @@ func generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whe
 		return sqlQuery, nil
 	}
 
-	isAggFunction := startWithAnyOf([]string{
+	isAggFunction := utils.StartWithAnyOf([]string{
 		"min", "max", "avg", "stddevPop", "sum",
 	}, strings.ToLower(check.ID))
 
@@ -100,7 +75,6 @@ func generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whe
 		return "", fmt.Errorf("invalid format for check: %s", check.ID)
 	}
 
-	// todo: extract matcher to make it DataSource agnostic
 	switch {
 	case strings.HasPrefix(check.ID, "row_count"):
 		checkExpression = strings.Replace(check.ID, "row_count", "count()", 1)
@@ -129,7 +103,7 @@ func generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whe
 	default:
 		// assume the ID itself is a valid boolean expression if no specific pattern matches
 		// this is less robust but covers simple cases
-		logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
+		a.logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
 			"check_id", check.ID)
 		checkExpression = check.ID
 	}
@@ -142,11 +116,25 @@ func generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whe
 	return sqlQuery, nil
 }
 
-func startWithAnyOf(prefixes []string, s string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, strings.ToLower(prefix)) {
-			return true
+func (a *ClickhouseDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (string, bool, error) {
+	rows, err := a.cnn.Query(ctx, query)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to execute query for check: %v", err)
+	}
+	defer rows.Close()
+
+	var queryResult string
+	var pass bool
+
+	for rows.Next() {
+		if err := rows.Scan(&queryResult, &pass); err != nil {
+			return "", false, fmt.Errorf("failed to scan result for check: %v", err)
 		}
 	}
-	return false
+
+	if err = rows.Err(); err != nil {
+		return "", false, fmt.Errorf("failed to scan result for check: %v", err)
+	}
+
+	return queryResult, pass, nil
 }

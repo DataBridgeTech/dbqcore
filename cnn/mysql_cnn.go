@@ -22,13 +22,16 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-func NewMysqlConnection(connectionCfg dbqcore.ConnectionConfig) (*sql.DB, error) {
+func NewMysqlConnection(connectionCfg dbqcore.ConnectionConfig, poolSize int) (*sql.DB, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
 		connectionCfg.Username, connectionCfg.Password, connectionCfg.Host, connectionCfg.Port, connectionCfg.Database)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(poolSize)
+	db.SetMaxIdleConns(poolSize)
 
 	return db, nil
 }

@@ -79,9 +79,7 @@ func (p *BaseProfiler) ProfileDataset(ctx context.Context, dataset string, sampl
 		taskPool.Enqueue("task:sampling", func() error {
 			sampleData, err := p.profilerImpl.GetSampleData(ctx, dataset)
 			if err != nil {
-				p.logger.Warn("failed to sample data",
-					"dataset", tableName,
-					"error", err.Error())
+				p.logger.Warn("failed to sample data", slog.String("dataset", tableName), slog.Any("error", err))
 				return nil
 			}
 			metricsLock.Lock()

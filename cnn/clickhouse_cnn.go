@@ -1,3 +1,17 @@
+// Copyright 2025 The DBQ Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cnn
 
 import (
@@ -6,7 +20,7 @@ import (
 	"github.com/DataBridgeTech/dbqcore"
 )
 
-func NewClickhouseConnection(connectionCfg dbqcore.ConnectionConfig) (driver.Conn, error) {
+func NewClickhouseConnection(connectionCfg dbqcore.ConnectionConfig, poolSize int) (driver.Conn, error) {
 	cnn, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{connectionCfg.Host},
 		Auth: clickhouse.Auth{
@@ -14,8 +28,8 @@ func NewClickhouseConnection(connectionCfg dbqcore.ConnectionConfig) (driver.Con
 			Username: connectionCfg.Username,
 			Password: connectionCfg.Password,
 		},
-		MaxOpenConns: 32,
-		MaxIdleConns: 32,
+		MaxOpenConns: poolSize,
+		MaxIdleConns: poolSize,
 		//TLS: &tls.Config{
 		//	InsecureSkipVerify: true,
 		//},

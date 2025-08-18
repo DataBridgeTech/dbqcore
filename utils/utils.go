@@ -12,26 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cnn
+package utils
 
-import (
-	"database/sql"
-	"fmt"
+import "strings"
 
-	"github.com/DataBridgeTech/dbqcore"
-	_ "github.com/lib/pq"
-)
-
-func NewPostgresqlConnection(connectionCfg dbqcore.ConnectionConfig, poolSize int) (*sql.DB, error) {
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		connectionCfg.Host, connectionCfg.Port, connectionCfg.Username, connectionCfg.Password, connectionCfg.Database)
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, err
+func StartWithAnyOf(prefixes []string, s string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(s, strings.ToLower(prefix)) {
+			return true
+		}
 	}
-
-	db.SetMaxOpenConns(poolSize)
-	db.SetMaxIdleConns(poolSize)
-
-	return db, nil
+	return false
 }

@@ -12,59 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package validators
+package adapters
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
 	"strings"
 
 	"github.com/DataBridgeTech/dbqcore"
+	"github.com/DataBridgeTech/dbqcore/utils"
 )
 
-type PostgresqlDbqDataValidator struct {
+type MysqlDbqDataSourceAdapter struct {
 	db     *sql.DB
 	logger *slog.Logger
 }
 
-func NewPostgresqlDbqDataValidator(db *sql.DB, logger *slog.Logger) dbqcore.DbqDataValidator {
-	return &PostgresqlDbqDataValidator{db: db, logger: logger}
+func NewMysqlDbqDataSourceAdapter(db *sql.DB, logger *slog.Logger) dbqcore.DbqDataSourceAdapter {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
+	return &MysqlDbqDataSourceAdapter{
+		db:     db,
+		logger: logger,
+	}
 }
 
-func (v *PostgresqlDbqDataValidator) RunCheck(ctx context.Context, check *dbqcore.DataQualityCheck, dataset string, defaultWhere string) (bool, string, error) {
-	query, err := v.generateDataCheckQuery(check, dataset, defaultWhere)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to generate SQL for check (%s)/(%s): %w", check.ID, dataset, err)
-	}
-
-	v.logger.Debug("executing query for check",
-		"check_id", check.ID,
-		"query", query)
-
-	rows, err := v.db.QueryContext(ctx, query)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to query database: %w", err)
-	}
-	defer rows.Close()
-
-	var checkPassed bool
-	for rows.Next() {
-		if err := rows.Scan(&checkPassed); err != nil {
-			return false, "", fmt.Errorf("failed to scan row: %w", err)
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return false, "", fmt.Errorf("error occurred during row iteration: %w", err)
-	}
-
-	return checkPassed, "", nil
-}
-
-func (v *PostgresqlDbqDataValidator) generateDataCheckQuery(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
+func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
 	var sqlQuery string
 
 	if check.ID == dbqcore.CheckTypeRawQuery {
@@ -84,7 +63,7 @@ func (v *PostgresqlDbqDataValidator) generateDataCheckQuery(check *dbqcore.DataQ
 		return sqlQuery, nil
 	}
 
-	isAggFunction := v.startWithAnyOf([]string{
+	isAggFunction := utils.StartWithAnyOf([]string{
 		"min", "max", "avg", "stddev_pop", "sum",
 	}, strings.ToLower(check.ID))
 
@@ -107,7 +86,7 @@ func (v *PostgresqlDbqDataValidator) generateDataCheckQuery(check *dbqcore.DataQ
 
 		column := matches[1]
 		remainder := matches[2]
-		checkExpression = fmt.Sprintf("count_if(\"%s\" is null)%s", column, remainder)
+		checkExpression = fmt.Sprintf("count_if(`%s` is null)%s", column, remainder)
 
 	case isAggFunction:
 		re := regexp.MustCompile(`^(min|max|avg|stddev_pop|sum)\((.*?)\)(.*)`)
@@ -119,7 +98,7 @@ func (v *PostgresqlDbqDataValidator) generateDataCheckQuery(check *dbqcore.DataQ
 		checkExpression = matches[0]
 
 	default:
-		v.logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
+		a.logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
 			"check_id", check.ID)
 		checkExpression = check.ID
 	}
@@ -132,11 +111,24 @@ func (v *PostgresqlDbqDataValidator) generateDataCheckQuery(check *dbqcore.DataQ
 	return sqlQuery, nil
 }
 
-func (v *PostgresqlDbqDataValidator) startWithAnyOf(prefixes []string, s string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, strings.ToLower(prefix)) {
-			return true
+func (a *MysqlDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (string, bool, error) {
+	rows, err := a.db.QueryContext(ctx, query)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to execute query for check: %v", err)
+	}
+	defer rows.Close()
+
+	var queryResult string
+	var pass bool
+	for rows.Next() {
+		if err := rows.Scan(&queryResult, &pass); err != nil {
+			return "", false, fmt.Errorf("failed to scan result for check: %v", err)
 		}
 	}
-	return false
+
+	if err = rows.Err(); err != nil {
+		return "", false, fmt.Errorf("failed to scan result for check: %v", err)
+	}
+
+	return queryResult, pass, nil
 }
