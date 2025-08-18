@@ -20,11 +20,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"regexp"
 	"strings"
 
 	"github.com/DataBridgeTech/dbqcore"
-	"github.com/DataBridgeTech/dbqcore/utils"
 )
 
 type MysqlDbqDataSourceAdapter struct {
@@ -44,19 +42,23 @@ func NewMysqlDbqDataSourceAdapter(db *sql.DB, logger *slog.Logger) dbqcore.DbqDa
 }
 
 func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
-	var sqlQuery string
+	if check.ParsedCheck == nil {
+		return "", fmt.Errorf("check does not have parsed structure")
+	}
 
-	if check.Expression == dbqcore.CheckTypeRawQuery {
+	parsed := check.ParsedCheck
+
+	// handle raw_query checks
+	if parsed.FunctionName == "raw_query" {
 		if check.Query == "" {
-			return "", fmt.Errorf("check with expression 'raw_query' requires a 'query' field")
+			return "", fmt.Errorf("raw_query check requires a 'query' field")
 		}
 
-		sqlQuery = strings.ReplaceAll(check.Query, "{{dataset}}", dataset)
+		sqlQuery := strings.ReplaceAll(check.Query, "{{dataset}}", dataset)
 		sqlQuery = strings.ReplaceAll(sqlQuery, "\n", " ")
-		sqlQuery = strings.ToLower(sqlQuery)
 
 		if whereClause != "" {
-			if strings.Contains(sqlQuery, " where ") {
+			if strings.Contains(strings.ToLower(sqlQuery), " where ") {
 				sqlQuery = fmt.Sprintf("%s and (%s)", sqlQuery, whereClause)
 			} else {
 				sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
@@ -66,50 +68,97 @@ func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.Dat
 		return sqlQuery, nil
 	}
 
-	isAggFunction := utils.StartWithAnyOf([]string{
-		"min", "max", "avg", "stddev_pop", "sum",
-	}, strings.ToLower(check.Expression))
+	// Build SQL query based on parsed check structure
+	var sqlQuery string
+	var selectExpression string
 
-	var checkExpression string
-	parts := strings.Fields(check.Expression)
-	if len(parts) < 3 {
-		return "", fmt.Errorf("invalid format for check: %s", check.Expression)
-	}
+	switch parsed.FunctionName {
+	case "row_count":
+		selectExpression = "COUNT(*)"
 
-	switch {
-	case strings.HasPrefix(check.Expression, "row_count"):
-		checkExpression = strings.Replace(check.Expression, "row_count", "count(*)", 1)
-
-	case strings.HasPrefix(check.Expression, "null_count"):
-		re := regexp.MustCompile(`^null_count\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.Expression)
-		if len(matches) < 3 {
-			return "", fmt.Errorf("invalid format for null_count check: %s", check.Expression)
+	case "not_null":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("not_null check requires a column parameter")
 		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("SUM(CASE WHEN `%s` IS NOT NULL THEN 1 ELSE 0 END)", column)
 
-		column := matches[1]
-		remainder := matches[2]
-		checkExpression = fmt.Sprintf("count_if(`%s` is null)%s", column, remainder)
-
-	case isAggFunction:
-		re := regexp.MustCompile(`^(min|max|avg|stddev_pop|sum)\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.Expression)
-		if len(matches) < 3 {
-			return "", fmt.Errorf("invalid format for aggregation function check: %s", check.Expression)
+	case "uniqueness":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("uniqueness check requires a column parameter")
 		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("COUNT(DISTINCT `%s`)", column)
 
-		checkExpression = matches[0]
+	case "freshness":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("freshness check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("TIMESTAMPDIFF(SECOND, MAX(`%s`), NOW())", column)
+
+	case "min":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("min check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("MIN(`%s`)", column)
+
+	case "max":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("max check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("MAX(`%s`)", column)
+
+	case "avg":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("avg check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("AVG(`%s`)", column)
+
+	case "sum":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("sum check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("SUM(`%s`)", column)
+
+	case "stddev":
+		if len(parsed.FunctionParameters) == 0 {
+			return "", fmt.Errorf("stddev check requires a column parameter")
+		}
+		column := parsed.FunctionParameters[0]
+		selectExpression = fmt.Sprintf("STDDEV_POP(`%s`)", column)
+
+	case "avgWeighted":
+		if len(parsed.FunctionParameters) < 2 {
+			return "", fmt.Errorf("avgWeighted check requires two parameters: column and weight")
+		}
+		column := parsed.FunctionParameters[0]
+		weight := parsed.FunctionParameters[1]
+		// MySQL doesn't have built-in weighted average, so we calculate it manually
+		selectExpression = fmt.Sprintf("SUM(`%s` * `%s`) / SUM(`%s`)", column, weight, weight)
 
 	default:
-		a.logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
-			"check_expression", check.Expression)
-		checkExpression = check.Expression
+		a.logger.Warn("Unknown function name in parsed check, using original expression",
+			"function_name", parsed.FunctionName,
+			"expression", check.Expression)
+		selectExpression = check.Expression
 	}
 
-	sqlQuery = fmt.Sprintf("select %s from %s", checkExpression, dataset)
+	// build the complete query
+	sqlQuery = fmt.Sprintf("SELECT %s FROM %s", selectExpression, dataset)
+
 	if whereClause != "" {
-		sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
+		sqlQuery = fmt.Sprintf("%s WHERE %s", sqlQuery, whereClause)
 	}
+
+	a.logger.Debug("Generated MySQL query",
+		"function", parsed.FunctionName,
+		"operator", parsed.Operator,
+		"query", sqlQuery)
 
 	return sqlQuery, nil
 }
