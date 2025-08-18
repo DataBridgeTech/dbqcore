@@ -63,7 +63,7 @@ type DbqDataValidatorImpl struct {
 
 func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourceAdapter, check *DataQualityCheck, dataset string, defaultWhere string) *ValidationResult {
 	result := &ValidationResult{
-		CheckID: check.ID,
+		CheckID: check.Expression,
 		Pass:    false,
 	}
 
@@ -74,12 +74,12 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 
 	checkQuery, err := adapter.InterpretDataQualityCheck(check, dataset, defaultWhere)
 	if err != nil {
-		result.Error = fmt.Sprintf("failed to generate query for check (%s)/(%s): %v", check.ID, dataset, err)
+		result.Error = fmt.Sprintf("failed to generate query for check (%s)/(%s): %v", check.Expression, dataset, err)
 		return result
 	}
 
 	d.logger.Debug("executing query for check",
-		"check_id", check.ID,
+		"check_expression", check.Expression,
 		"check_query", checkQuery)
 
 	startTime := time.Now()
@@ -87,12 +87,12 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 	elapsed := time.Since(startTime).Milliseconds()
 
 	if err != nil {
-		result.Error = fmt.Sprintf("failed to execute query for check (%s): %v", check.ID, err)
+		result.Error = fmt.Sprintf("failed to execute query for check (%s): %v", check.Expression, err)
 		return result
 	}
 
 	d.logger.Debug("query completed in time",
-		"check_id", check.ID,
+		"check_expression", check.Expression,
 		"duration_ms", elapsed)
 
 	// todo: do actual check validation based on the query result

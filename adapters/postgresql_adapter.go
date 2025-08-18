@@ -46,9 +46,9 @@ func NewPostgresqlDbqDataSourceAdapter(db *sql.DB, logger *slog.Logger) dbqcore.
 func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
 	var sqlQuery string
 
-	if check.ID == dbqcore.CheckTypeRawQuery {
+	if check.Expression == dbqcore.CheckTypeRawQuery {
 		if check.Query == "" {
-			return "", fmt.Errorf("check with id 'raw_query' requires a 'query' field")
+			return "", fmt.Errorf("check with expression 'raw_query' requires a 'query' field")
 		}
 
 		sqlQuery = strings.ReplaceAll(check.Query, "{{dataset}}", dataset)
@@ -68,23 +68,23 @@ func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 
 	isAggFunction := utils.StartWithAnyOf([]string{
 		"min", "max", "avg", "stddev_pop", "sum",
-	}, strings.ToLower(check.ID))
+	}, strings.ToLower(check.Expression))
 
 	var checkExpression string
-	parts := strings.Fields(check.ID)
+	parts := strings.Fields(check.Expression)
 	if len(parts) < 3 {
-		return "", fmt.Errorf("invalid format for check: %s", check.ID)
+		return "", fmt.Errorf("invalid format for check: %s", check.Expression)
 	}
 
 	switch {
-	case strings.HasPrefix(check.ID, "row_count"):
-		checkExpression = strings.Replace(check.ID, "row_count", "count(*)", 1)
+	case strings.HasPrefix(check.Expression, "row_count"):
+		checkExpression = strings.Replace(check.Expression, "row_count", "count(*)", 1)
 
-	case strings.HasPrefix(check.ID, "null_count"):
+	case strings.HasPrefix(check.Expression, "null_count"):
 		re := regexp.MustCompile(`^null_count\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.ID)
+		matches := re.FindStringSubmatch(check.Expression)
 		if len(matches) < 3 {
-			return "", fmt.Errorf("invalid format for null_count check: %s", check.ID)
+			return "", fmt.Errorf("invalid format for null_count check: %s", check.Expression)
 		}
 
 		column := matches[1]
@@ -93,17 +93,17 @@ func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 
 	case isAggFunction:
 		re := regexp.MustCompile(`^(min|max|avg|stddev_pop|sum)\((.*?)\)(.*)`)
-		matches := re.FindStringSubmatch(check.ID)
+		matches := re.FindStringSubmatch(check.Expression)
 		if len(matches) < 3 {
-			return "", fmt.Errorf("invalid format for aggregation function check: %s", check.ID)
+			return "", fmt.Errorf("invalid format for aggregation function check: %s", check.Expression)
 		}
 
 		checkExpression = matches[0]
 
 	default:
 		a.logger.Warn("DataQualityCheck did not match known check patterns. Assuming it's a direct SQL boolean expression",
-			"check_id", check.ID)
-		checkExpression = check.ID
+			"check_expression", check.Expression)
+		checkExpression = check.Expression
 	}
 
 	sqlQuery = fmt.Sprintf("select %s from %s", checkExpression, dataset)
