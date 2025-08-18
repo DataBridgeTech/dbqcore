@@ -14,48 +14,94 @@
 
 package dbqcore
 
-// Copyright 2025 The DBQ Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 import (
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
 
-type OnErrorAction string
+type OnFailAction string
 
 const (
-	OnErrorActionIgnore OnErrorAction = "ignore"
-	OnErrorActionAlert  OnErrorAction = "alert"
+	OnFailActionWarn  OnFailAction = "warn"
+	OnFailActionError OnFailAction = "error"
 )
 
 type ChecksFileConfig struct {
-	Version     string           `yaml:"version"`
-	Validations []ValidationRule `yaml:"validations"`
+	Version string           `yaml:"version"`
+	Rules   []ValidationRule `yaml:"rules"`
 }
 
 type ValidationRule struct {
 	Dataset string             `yaml:"dataset"`
-	Where   string             `yaml:"where,omitempty"` // optional, applies for all checks
+	Where   string             `yaml:"where,omitempty"`
 	Checks  []DataQualityCheck `yaml:"checks"`
 }
 
 type DataQualityCheck struct {
-	ID          string        `yaml:"id"`
-	Description string        `yaml:"description,omitempty"` // optional
-	OnError     OnErrorAction `yaml:"on_error,omitempty"`    // optional (pass - default, fail)
-	Query       string        `yaml:"query,omitempty"`       // optional raw query
+	Expression  string       `yaml:"-"`
+	Description string       `yaml:"desc,omitempty"`
+	OnFail      OnFailAction `yaml:"on_fail,omitempty"`
+	Query       string       `yaml:"query,omitempty"`
+
+	ParsedCheck *CheckExpression `yaml:"-"`
+}
+
+func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
+		key := node.Content[0].Value
+		value := node.Content[1]
+
+		if key == "raw_query" {
+			c.Expression = key
+			var rawQueryCheck struct {
+				Desc   string       `yaml:"desc,omitempty"`
+				Query  string       `yaml:"query"`
+				OnFail OnFailAction `yaml:"on_fail,omitempty"`
+			}
+			if err := value.Decode(&rawQueryCheck); err != nil {
+				return err
+			}
+			c.Description = rawQueryCheck.Desc
+			c.Query = rawQueryCheck.Query
+			c.OnFail = rawQueryCheck.OnFail
+
+			parsedCheck, err := ParseCheckExpression("raw_query")
+			if err != nil {
+				return err
+			}
+			c.ParsedCheck = parsedCheck
+		} else {
+			c.Expression = key
+
+			if value.Kind == yaml.MappingNode {
+				var checkDetails struct {
+					Desc   string       `yaml:"desc,omitempty"`
+					OnFail OnFailAction `yaml:"on_fail,omitempty"`
+				}
+				if err := value.Decode(&checkDetails); err != nil {
+					return err
+				}
+				c.Description = checkDetails.Desc
+				c.OnFail = checkDetails.OnFail
+			}
+
+			parsedCheck, err := ParseCheckExpression(key)
+			if err != nil {
+				return err
+			}
+			c.ParsedCheck = parsedCheck
+		}
+	} else if node.Kind == yaml.ScalarNode {
+		c.Expression = node.Value
+		parsedCheck, err := ParseCheckExpression(node.Value)
+		if err != nil {
+			return err
+		}
+		c.ParsedCheck = parsedCheck
+	}
+
+	return nil
 }
 
 func LoadChecksFileConfig(fileName string) (*ChecksFileConfig, error) {

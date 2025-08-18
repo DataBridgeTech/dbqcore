@@ -1,0 +1,157 @@
+# Data Quality Checks Configuration
+# 
+# Scope definitions:
+#   - schema: Operations that affect the entire dataset/schema (raw_query)
+#   - table: Operations on table-level metrics (row_count)
+#   - column: Operations on specific columns (not_null, uniqueness, freshness, min, max, etc.)
+#
+# Available check functions:
+#   - row_count: Count of rows in the table
+#   - not_null: Check for null values in a column
+#   - freshness: Check data recency based on timestamp column
+#   - uniqueness: Check for unique values in a column
+#   - min/max: Minimum and maximum values for numeric columns
+#   - sum: Sum of values in a column
+#   - avg: Average of values in a column
+#   - stddev: Standard deviation of values in a column
+#   - avgWeighted: Weighted average with custom weight parameter
+#   - raw_query: Custom SQL query for complex validations
+#
+# Operators supported:
+#   - Comparison: <, >, <=, >=, ==, !=
+#   - Range: between X and Y
+#   - Function-only checks (like not_null, uniqueness)
+
+version: 1
+rules:
+  # Clickhouse dataset examples
+  - dataset: ch@[nyc_taxi.trips_small]
+    where: "pickup_datetime > '2014-01-01'"
+    checks:
+      # table-level checks
+      - row_count between 1000 and 50000:
+          desc: "Dataset should contain a reasonable number of trips"
+          on_fail: error
+
+      # column existence and nullability
+      - not_null(trip_id):
+          desc: "Trip ID is mandatory"
+      - not_null(pickup_datetime)
+      - not_null(dropoff_datetime)
+      
+      # data freshness
+      - freshness(pickup_datetime) < 7d:
+          desc: "Data should be no older than 7 days"
+          on_fail: warn
+      
+      # uniqueness constraints
+      - uniqueness(trip_id):
+          desc: "Trip IDs must be unique"
+          on_fail: error
+      
+      # numeric validations
+      - min(trip_distance) >= 0:
+          desc: "Trip distance cannot be negative"
+      - max(trip_distance) < 1000:
+          desc: "Maximum trip distance seems unrealistic"
+          on_fail: warn
+      - avg(trip_distance) between 1.0 and 20.0:
+          desc: "Average trip distance should be reasonable"
+      - stddev(trip_distance) < 100:
+          desc: "Trip distance variation should be within normal range"
+      
+      # fare validations
+      - min(fare_amount) > 0:
+          desc: "Fare amount should be positive"
+      - max(fare_amount) < 1000:
+          desc: "Maximum fare seems too high"
+      - sum(fare_amount) between 10000 and 10000000:
+          desc: "Total fare amount should be within expected range"
+      
+      # example of custom weighted average
+      - avgWeighted(fare_amount, trip_distance) between 2.0 and 15.0:
+          desc: "Weighted average fare per distance should be reasonable"
+
+      # custom validation with raw query
+      - raw_query:
+          desc: "Check for trips with zero distance but positive fare"
+          query: "select count() from {{dataset}} where trip_distance = 0 and fare_amount > 0"
+          on_fail: warn
+
+  # PostgreSQL dataset examples
+  - dataset: pg@[public.land_registry_price_paid_uk]
+    where: "transfer_date >= '2025-01-01'"
+    checks:
+      - row_count() between 100 and 100000:
+          desc: "Recent property transactions should be within expected volume"
+      
+      # price checks
+      - not_null(price):
+          desc: "Property price is mandatory"
+      - min(price) > 1000:
+          desc: "Minimum price should be realistic"
+      - max(price) < 50000000:
+          desc: "Maximum price should be within UK market range"
+      - avg(price) between 200000 and 800000:
+          desc: "Average property price should align with market data"
+      - stddev(price) < 500000:
+          desc: "Price standard deviation should indicate reasonable market variation"
+      
+      # property type validations
+      - not_null(property_type)
+      - uniqueness(transaction_id):
+          desc: "Each transaction must have a unique identifier"
+          on_fail: error
+      
+      # date validations
+      - freshness(transfer_date) < 1d:
+          desc: "Transfer date should be very recent"
+          on_fail: warn
+
+  # MySQL dataset examples
+  - dataset: mysql@[ecommerce.orders]
+    where: "created_at >= CURRENT_DATE - INTERVAL 30 DAY"
+    checks:
+      # order volume validation
+      - row_count between 100 and 10000:
+          desc: "Monthly order volume should be within business expectations"
+          on_fail: warn
+      
+      # customer data integrity
+      - not_null(customer_id):
+          desc: "Every order must have a customer ID"
+          on_fail: error
+      - not_null(order_status)
+      
+      # order value validations
+      - min(total_amount) > 0:
+          desc: "Order total must be positive"
+          on_fail: error
+      - max(total_amount) < 10000:
+          desc: "Unusually high order amount detected"
+          on_fail: warn
+      - avg(total_amount) between 25.0 and 200.0:
+          desc: "Average order value should align with business metrics"
+      
+      # item count validation
+      - min(item_count) >= 1:
+          desc: "Order must contain at least one item"
+          on_fail: error
+      - max(item_count) <= 50:
+          desc: "Unusually large number of items in single order"
+      - avg(item_count) between 1.5 and 5.0:
+          desc: "Average items per order should be reasonable"
+      
+      # business logic validation
+      - raw_query:
+          desc: "Ensure no duplicate order numbers exist"
+          query: "select count(*) - count(distinct order_number) from {{dataset}}"
+          on_fail: error
+      
+      - raw_query:
+          desc: "Check for orders with inconsistent status transitions"
+          query: |
+            select count(*) from {{dataset}} 
+            where order_status = 'shipped' 
+            and shipped_date is null
+          on_fail: warn
