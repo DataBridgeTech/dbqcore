@@ -68,7 +68,7 @@ func (p *BaseProfiler) ProfileDataset(ctx context.Context, dataset string, sampl
 	}
 
 	if len(columnsToProcess) == 0 {
-		p.logger.Warn("no columns found for table", "dataset", dataset, ", returning basic info")
+		p.logger.Warn("no columns found for table, returning basic info", "dataset", dataset)
 		metrics.ProfilingDurationMs = time.Since(startTime).Milliseconds()
 		return metrics, nil
 	}

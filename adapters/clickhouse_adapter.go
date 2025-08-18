@@ -46,16 +46,17 @@ func NewClickhouseDbqDataSourceAdapter(cnn driver.Conn, logger *slog.Logger) dbq
 func (a *ClickhouseDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
 	var sqlQuery string
 
-	// handle raw_query first
 	if check.ID == dbqcore.CheckTypeRawQuery {
 		if check.Query == "" {
 			return "", fmt.Errorf("check with id 'raw_query' requires a 'query' field")
 		}
 
-		sqlQuery = strings.ReplaceAll(check.Query, "{{table}}", dataset)
+		sqlQuery = strings.ReplaceAll(check.Query, "{{dataset}}", dataset)
+		sqlQuery = strings.ReplaceAll(sqlQuery, "\n", " ")
+		sqlQuery = strings.ToLower(sqlQuery)
+
 		if whereClause != "" {
-			// todo: more sophisticated check is needed
-			if strings.Contains(strings.ToLower(sqlQuery), " where ") {
+			if strings.Contains(sqlQuery, " where ") {
 				sqlQuery = fmt.Sprintf("%s and (%s)", sqlQuery, whereClause)
 			} else {
 				sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)

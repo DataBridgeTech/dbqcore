@@ -51,12 +51,15 @@ func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.Dat
 			return "", fmt.Errorf("check with id 'raw_query' requires a 'query' field")
 		}
 
-		sqlQuery = strings.ReplaceAll(check.Query, "{{table}}", dataset)
+		sqlQuery = strings.ReplaceAll(check.Query, "{{dataset}}", dataset)
+		sqlQuery = strings.ReplaceAll(sqlQuery, "\n", " ")
+		sqlQuery = strings.ToLower(sqlQuery)
+
 		if whereClause != "" {
-			if strings.Contains(strings.ToLower(sqlQuery), " where ") {
-				sqlQuery = fmt.Sprintf("%s AND (%s)", sqlQuery, whereClause)
+			if strings.Contains(sqlQuery, " where ") {
+				sqlQuery = fmt.Sprintf("%s and (%s)", sqlQuery, whereClause)
 			} else {
-				sqlQuery = fmt.Sprintf("%s WHERE %s", sqlQuery, whereClause)
+				sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
 			}
 		}
 
@@ -103,9 +106,9 @@ func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.Dat
 		checkExpression = check.ID
 	}
 
-	sqlQuery = fmt.Sprintf("SELECT %s FROM %s", checkExpression, dataset)
+	sqlQuery = fmt.Sprintf("select %s from %s", checkExpression, dataset)
 	if whereClause != "" {
-		sqlQuery = fmt.Sprintf("%s WHERE %s", sqlQuery, whereClause)
+		sqlQuery = fmt.Sprintf("%s where %s", sqlQuery, whereClause)
 	}
 
 	return sqlQuery, nil
