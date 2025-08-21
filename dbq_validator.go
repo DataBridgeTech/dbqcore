@@ -47,8 +47,8 @@ type DbqDataSourceAdapter interface {
 	// InterpretDataQualityCheck generates a SQL query specific for datasource for a data quality check
 	InterpretDataQualityCheck(check *DataQualityCheck, dataset string, defaultWhere string) (string, error)
 
-	// ExecuteQuery executes the SQL query and returns the query result and flag if check passed or not
-	ExecuteQuery(ctx context.Context, query string) (string, bool, error)
+	// ExecuteQuery executes the SQL query and returns the query result
+	ExecuteQuery(ctx context.Context, query string) (string, error)
 }
 
 //
