@@ -68,17 +68,6 @@ func TestParseCheckExpression(t *testing.T) {
 			},
 		},
 		{
-			name:       "avgWeighted with multiple parameters",
-			expression: "avgWeighted(col, 2) < 10",
-			expected: &CheckExpression{
-				FunctionName:       "avgWeighted",
-				FunctionParameters: []string{"col", "2"},
-				Scope:              ScopeColumn,
-				Operator:           "<",
-				ThresholdValue:     10,
-			},
-		},
-		{
 			name:       "stddev with large number",
 			expression: "stddev(trip_distance) < 100000",
 			expected: &CheckExpression{
@@ -420,14 +409,9 @@ func TestInferScope(t *testing.T) {
 			expected:     ScopeColumn,
 		},
 		{
-			name:         "column scope function - avgWeighted",
-			functionName: "avgWeighted",
-			expected:     ScopeColumn,
-		},
-		{
 			name:         "schema scope function",
 			functionName: "raw_query",
-			expected:     ScopeSchema,
+			expected:     ScopeTable,
 		},
 		{
 			name:         "unknown function defaults to column",

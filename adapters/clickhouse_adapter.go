@@ -77,68 +77,60 @@ func (a *ClickhouseDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 		selectExpression = "count()"
 
 	case "not_null":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("not_null check requires a column parameter")
+		if err := requireParameter("not_null", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("countIf(isNotNull(%s))", column)
 
 	case "uniqueness":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("uniqueness check requires a column parameter")
+		if err := requireParameter("uniqueness", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("uniqExact(%s)", column)
 
 	case "freshness":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("freshness check requires a column parameter")
+		if err := requireParameter("freshness", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("dateDiff('second', max(%s), now())", column)
 
 	case "min":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("min check requires a column parameter")
+		if err := requireParameter("min", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("min(%s)", column)
 
 	case "max":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("max check requires a column parameter")
+		if err := requireParameter("max", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("max(%s)", column)
 
 	case "avg":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("avg check requires a column parameter")
+		if err := requireParameter("avg", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("avg(%s)", column)
 
 	case "sum":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("sum check requires a column parameter")
+		if err := requireParameter("sum", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("sum(%s)", column)
 
 	case "stddev":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("stddev check requires a column parameter")
+		if err := requireParameter("stddev", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("stddevPop(%s)", column)
-
-	case "avgWeighted":
-		if len(parsed.FunctionParameters) < 2 {
-			return "", fmt.Errorf("avgWeighted check requires two parameters: column and weight")
-		}
-		column := parsed.FunctionParameters[0]
-		weight := parsed.FunctionParameters[1]
-		selectExpression = fmt.Sprintf("avgWeighted(%s, %s)", column, weight)
 
 	default:
 		a.logger.Warn("Unknown function name in parsed check, using original expression",

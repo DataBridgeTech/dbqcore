@@ -45,22 +45,21 @@ type CheckExpression struct {
 var (
 	tableScopeFunctions = map[string]bool{
 		"row_count": true,
+		"raw_query": true,
 	}
 
 	columnScopeFunctions = map[string]bool{
-		"not_null":    true,
-		"uniqueness":  true,
-		"freshness":   true,
-		"min":         true,
-		"max":         true,
-		"sum":         true,
-		"stddev":      true,
-		"avgWeighted": true,
+		"not_null":   true,
+		"uniqueness": true,
+		"freshness":  true,
+		"min":        true,
+		"max":        true,
+		"sum":        true,
+		"stddev":     true,
 	}
 
-	schemaScopeFunctions = map[string]bool{
-		"raw_query": true,
-	}
+	// reserved for schema checks
+	schemaScopeFunctions = map[string]bool{}
 )
 
 func ParseCheckExpression(expression string) (*CheckExpression, error) {

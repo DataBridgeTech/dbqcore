@@ -77,69 +77,60 @@ func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 		selectExpression = "COUNT(*)"
 
 	case "not_null":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("not_null check requires a column parameter")
+		if err := requireParameter("not_null", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("COUNT(CASE WHEN \"%s\" IS NOT NULL THEN 1 END)", column)
 
 	case "uniqueness":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("uniqueness check requires a column parameter")
+		if err := requireParameter("uniqueness", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("COUNT(DISTINCT \"%s\")", column)
 
 	case "freshness":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("freshness check requires a column parameter")
+		if err := requireParameter("freshness", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("EXTRACT(EPOCH FROM (NOW() - MAX(\"%s\")))", column)
 
 	case "min":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("min check requires a column parameter")
+		if err := requireParameter("min", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("MIN(\"%s\")", column)
 
 	case "max":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("max check requires a column parameter")
+		if err := requireParameter("max", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("MAX(\"%s\")", column)
 
 	case "avg":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("avg check requires a column parameter")
+		if err := requireParameter("avg", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("AVG(\"%s\")", column)
 
 	case "sum":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("sum check requires a column parameter")
+		if err := requireParameter("sum", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("SUM(\"%s\")", column)
 
 	case "stddev":
-		if len(parsed.FunctionParameters) == 0 {
-			return "", fmt.Errorf("stddev check requires a column parameter")
+		if err := requireParameter("stddev", parsed.FunctionParameters); err != nil {
+			return "", err
 		}
 		column := parsed.FunctionParameters[0]
 		selectExpression = fmt.Sprintf("STDDEV_POP(\"%s\")", column)
-
-	case "avgWeighted":
-		if len(parsed.FunctionParameters) < 2 {
-			return "", fmt.Errorf("avgWeighted check requires two parameters: column and weight")
-		}
-		column := parsed.FunctionParameters[0]
-		weight := parsed.FunctionParameters[1]
-		// PostgreSQL doesn't have built-in weighted average, so we calculate it manually
-		selectExpression = fmt.Sprintf("SUM(\"%s\" * \"%s\") / SUM(\"%s\")", column, weight, weight)
 
 	default:
 		a.logger.Warn("Unknown function name in parsed check, using original expression",

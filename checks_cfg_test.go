@@ -80,7 +80,7 @@ rules:
     checks:
       - row_count() between 1 and 100:
           desc: "some explanation goes here"
-      - avgWeighted(col, 2) < 10:
+      - sum(col) < 1000:
           desc: "some explanation goes here"
           on_fail: warn
       - stddev(price) < 150000:
@@ -105,15 +105,15 @@ rules:
 								},
 							},
 							{
-								Expression:  "avgWeighted(col, 2) < 10",
+								Expression:  "sum(col) < 1000",
 								Description: "some explanation goes here",
 								OnFail:      OnFailActionWarn,
 								ParsedCheck: &CheckExpression{
-									FunctionName:       "avgWeighted",
-									FunctionParameters: []string{"col", "2"},
+									FunctionName:       "sum",
+									FunctionParameters: []string{"col"},
 									Scope:              ScopeColumn,
 									Operator:           "<",
-									ThresholdValue:     10,
+									ThresholdValue:     1000,
 								},
 							},
 							{
@@ -158,7 +158,7 @@ rules:
 								ParsedCheck: &CheckExpression{
 									FunctionName:       "raw_query",
 									FunctionParameters: []string{},
-									Scope:              ScopeSchema,
+									Scope:              ScopeTable,
 									Operator:           "",
 									ThresholdValue:     nil,
 								},
@@ -255,7 +255,7 @@ rules:
 								ParsedCheck: &CheckExpression{
 									FunctionName:       "raw_query",
 									FunctionParameters: []string{},
-									Scope:              ScopeSchema,
+									Scope:              ScopeTable,
 									Operator:           "",
 									ThresholdValue:     nil,
 								},
