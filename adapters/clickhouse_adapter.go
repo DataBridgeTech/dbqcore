@@ -164,7 +164,7 @@ func (a *ClickhouseDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query
 	var queryResult string
 	for rows.Next() {
 		if err := rows.Scan(&queryResult); err != nil {
-			return "", false, fmt.Errorf("failed to scan result for check: %v", err)
+			return "", fmt.Errorf("failed to scan result for check: %v", err)
 		}
 	}
 
