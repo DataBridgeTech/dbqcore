@@ -25,8 +25,5 @@ jobs:
     - name: Download dependencies
       run: go mod download
     
-    - name: Run tests
-      run: go test -v ./...
-    
     - name: Run tests with race detection
       run: go test -race -v ./...
