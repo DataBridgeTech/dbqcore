@@ -42,6 +42,29 @@ func NewPostgresqlDbqDataSourceAdapter(db *sql.DB, logger *slog.Logger) dbqcore.
 }
 
 func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
+	// Handle schema checks first
+	if check.SchemaCheck != nil && check.SchemaCheck.ExpectColumnsOrdered != nil {
+		schema, table, err := extractDatabaseAndTableFromDataset(dataset)
+		if err != nil {
+			return "", err
+		}
+
+		expectedColumns := check.SchemaCheck.ExpectColumnsOrdered.ColumnsOrder
+		columnChecks := make([]string, len(expectedColumns))
+		for i, col := range expectedColumns {
+			columnChecks[i] = fmt.Sprintf("(column_name = '%s' and ordinal_position = %d)", col, i+1)
+		}
+
+		// Query returns count of matching columns in correct positions
+		sqlQuery := fmt.Sprintf(`select count(*)
+			from information_schema.columns
+			where table_schema = '%s'
+			and table_name = '%s'
+			and (%s)`, schema, table, strings.Join(columnChecks, " or "))
+
+		return sqlQuery, nil
+	}
+
 	if check.ParsedCheck == nil {
 		return "", fmt.Errorf("check does not have parsed structure")
 	}

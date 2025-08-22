@@ -195,6 +195,57 @@ func TestMySQLAdapter_InterpretDataQualityCheck(t *testing.T) {
 			errorMessage: "raw_query check requires a 'query' field",
 		},
 		{
+			name: "expect_columns_ordered check",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id", "name", "email"},
+					},
+				},
+			},
+			dataset:     "mydb.users",
+			whereClause: "",
+			expectedSQL: `select count(*)
+			from information_schema.columns
+			where table_schema = 'mydb'
+			and table_name = 'users'
+			and ((column_name = 'id' and ordinal_position = 1) or (column_name = 'name' and ordinal_position = 2) or (column_name = 'email' and ordinal_position = 3))`,
+		},
+		{
+			name: "expect_columns_ordered check with single column",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id"},
+					},
+				},
+			},
+			dataset:     "testdb.products",
+			whereClause: "",
+			expectedSQL: `select count(*)
+			from information_schema.columns
+			where table_schema = 'testdb'
+			and table_name = 'products'
+			and ((column_name = 'id' and ordinal_position = 1))`,
+		},
+		{
+			name: "expect_columns_ordered check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id", "name"},
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
+		},
+		{
 			name: "unknown function fallback",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "custom_function(col1, col2) > 100",

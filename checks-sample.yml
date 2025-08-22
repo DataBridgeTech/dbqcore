@@ -1,7 +1,7 @@
 # Data Quality Checks Configuration
 # 
 # Scope definitions:
-#   - schema: Operations that affect the entire dataset/schema (raw_query)
+#   - schema: Operations that affect the entire dataset/schema (expect_columns_ordered, raw_query)
 #   - table: Operations on table-level metrics (row_count)
 #   - column: Operations on specific columns (not_null, uniqueness, freshness, min, max, etc.)
 #
@@ -15,6 +15,7 @@
 #   - avg: Average of values in a column
 #   - stddev: Standard deviation of values in a column
 #   - avgWeighted: Weighted average with custom weight parameter
+#   - expect_columns_ordered: Validate table columns match an ordered list
 #   - raw_query: Custom SQL query for complex validations
 #
 # Operators supported:
@@ -28,6 +29,13 @@ rules:
   - dataset: ch@[nyc_taxi.trips_small]
     where: "pickup_datetime > '2014-01-01'"
     checks:
+      # schema-level checks
+      - schema_check:
+          expect_columns_ordered:
+            columns_order: [trip_id, pickup_datetime, dropoff_datetime, trip_distance, fare_amount]
+        desc: "Ensure table columns are in the expected order"
+        on_fail: error
+
       # table-level checks
       - row_count between 1000 and 50000:
           desc: "Dataset should contain a reasonable number of trips"
@@ -82,6 +90,13 @@ rules:
   - dataset: pg@[public.land_registry_price_paid_uk]
     where: "transfer_date >= '2025-01-01'"
     checks:
+      # schema validation
+      - schema_check:
+          expect_columns_ordered:
+            columns: [transaction_id, price, transfer_date, property_type, address]
+        desc: "Validate expected column order for data consistency"
+        on_fail: warn
+      
       - row_count() between 100 and 100000:
           desc: "Recent property transactions should be within expected volume"
       
@@ -112,6 +127,13 @@ rules:
   - dataset: mysql@[ecommerce.orders]
     where: "created_at >= CURRENT_DATE - INTERVAL 30 DAY"
     checks:
+      # schema validation  
+      - schema_check:
+          expect_columns_ordered:
+            columns: [order_id, customer_id, order_status, total_amount, item_count, created_at, shipped_date]
+        desc: "Ensure order table maintains expected column structure"
+        on_fail: error
+      
       # order volume validation
       - row_count between 100 and 10000:
           desc: "Monthly order volume should be within business expectations"

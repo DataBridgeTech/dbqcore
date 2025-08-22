@@ -142,45 +142,45 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 			name: "raw_query check",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "raw_query",
-				Query:       "SELECT count(*) FROM {{dataset}} WHERE status = 'active'",
+				Query:       "select count(*) from {{dataset}} where status = 'active'",
 				ParsedCheck: createMockParsedCheck("raw_query", []string{}, "", nil),
 			},
 			dataset:     "users",
 			whereClause: "",
-			expectedSQL: "SELECT count(*) FROM users WHERE status = 'active'",
+			expectedSQL: "select count(*) from users where status = 'active'",
 		},
 		{
 			name: "raw_query check with where clause",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "raw_query",
-				Query:       "SELECT count(*) FROM {{dataset}}",
+				Query:       "select count(*) from {{dataset}}",
 				ParsedCheck: createMockParsedCheck("raw_query", []string{}, "", nil),
 			},
 			dataset:     "products",
 			whereClause: "category = 'electronics'",
-			expectedSQL: "SELECT count(*) FROM products where category = 'electronics'",
+			expectedSQL: "select count(*) from products where category = 'electronics'",
 		},
 		{
 			name: "raw_query check with existing where clause",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "raw_query",
-				Query:       "SELECT AVG(price) FROM {{dataset}} WHERE category = 'books'",
+				Query:       "select avg(price) from {{dataset}} where category = 'books'",
 				ParsedCheck: createMockParsedCheck("raw_query", []string{}, "", nil),
 			},
 			dataset:     "products",
 			whereClause: "active = 1",
-			expectedSQL: "SELECT AVG(price) FROM products WHERE category = 'books' and (active = 1)",
+			expectedSQL: "select avg(price) from products where category = 'books' and (active = 1)",
 		},
 		{
 			name: "raw_query check with multiline query",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "raw_query",
-				Query:       "SELECT count(*)\nFROM {{dataset}}\nWHERE active = 1",
+				Query:       "select count(*)\nfrom {{dataset}}\nwhere active = 1",
 				ParsedCheck: createMockParsedCheck("raw_query", []string{}, "", nil),
 			},
 			dataset:     "orders",
 			whereClause: "",
-			expectedSQL: "SELECT count(*) FROM orders WHERE active = 1",
+			expectedSQL: "select count(*) from orders where active = 1",
 		},
 		{
 			name: "raw_query check missing query field",
@@ -193,6 +193,57 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 			whereClause:  "",
 			expectError:  true,
 			errorMessage: "raw_query check requires a 'query' field",
+		},
+		{
+			name: "expect_columns_ordered check",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id", "name", "email"},
+					},
+				},
+			},
+			dataset:     "default.users",
+			whereClause: "",
+			expectedSQL: `select count()
+			from system.columns
+			where database = 'default'
+			and table = 'users'
+			and ((name = 'id' and position = 1) or (name = 'name' and position = 2) or (name = 'email' and position = 3))`,
+		},
+		{
+			name: "expect_columns_ordered check with single column",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id"},
+					},
+				},
+			},
+			dataset:     "analytics.events",
+			whereClause: "",
+			expectedSQL: `select count()
+			from system.columns
+			where database = 'analytics'
+			and table = 'events'
+			and ((name = 'id' and position = 1))`,
+		},
+		{
+			name: "expect_columns_ordered check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns_ordered",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
+						ColumnsOrder: []string{"id", "name"},
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
 		},
 		{
 			name: "unknown function fallback",

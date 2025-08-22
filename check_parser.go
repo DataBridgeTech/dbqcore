@@ -59,7 +59,9 @@ var (
 	}
 
 	// reserved for schema checks
-	schemaScopeFunctions = map[string]bool{}
+	schemaScopeFunctions = map[string]bool{
+		// Schema checks are now handled via schema_check config format
+	}
 )
 
 func ParseCheckExpression(expression string) (*CheckExpression, error) {
