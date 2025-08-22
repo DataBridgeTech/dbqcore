@@ -297,6 +297,89 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 			errorMessage: "dataset must be in format database.table",
 		},
 		{
+			name: "columns_not_present check with column list",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Columns: []string{"credit_card_number", "ssn", "password"},
+					},
+				},
+			},
+			dataset:     "default.users",
+			whereClause: "",
+			expectedSQL: `select count()
+				from system.columns
+				where database = 'default'
+				and table = 'users'
+				and (name = 'credit_card_number' or name = 'ssn' or name = 'password')`,
+		},
+		{
+			name: "columns_not_present check with pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Pattern: "backup_*",
+					},
+				},
+			},
+			dataset:     "analytics.metrics",
+			whereClause: "",
+			expectedSQL: `select count()
+				from system.columns
+				where database = 'analytics'
+				and table = 'metrics'
+				and (name LIKE 'backup_%')`,
+		},
+		{
+			name: "columns_not_present check with both columns and pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Columns: []string{"api_key", "secret"},
+						Pattern: "token_*",
+					},
+				},
+			},
+			dataset:     "api.requests",
+			whereClause: "",
+			expectedSQL: `select count()
+				from system.columns
+				where database = 'api'
+				and table = 'requests'
+				and (name = 'api_key' or name = 'secret' or name LIKE 'token_%')`,
+		},
+		{
+			name: "columns_not_present check with neither columns nor pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{},
+				},
+			},
+			dataset:      "test.table",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "columns_not_present check requires either 'columns' list or 'pattern'",
+		},
+		{
+			name: "columns_not_present check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Pattern: "old_*",
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
+		},
+		{
 			name: "unknown function fallback",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "custom_function(col1, col2) > 100",

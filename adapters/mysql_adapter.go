@@ -82,6 +82,39 @@ func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.Dat
 
 			return sqlQuery, nil
 		}
+
+		if check.SchemaCheck.ColumnsNotPresent != nil {
+			config := check.SchemaCheck.ColumnsNotPresent
+
+			// Validate that at least one of columns or pattern is provided
+			if len(config.Columns) == 0 && config.Pattern == "" {
+				return "", fmt.Errorf("columns_not_present check requires either 'columns' list or 'pattern'")
+			}
+
+			var conditions []string
+
+			// Add exact column name matches
+			if len(config.Columns) > 0 {
+				for _, col := range config.Columns {
+					conditions = append(conditions, fmt.Sprintf("column_name = '%s'", col))
+				}
+			}
+
+			// Add pattern matching
+			if config.Pattern != "" {
+				likePattern := strings.ReplaceAll(config.Pattern, "*", "%")
+				conditions = append(conditions, fmt.Sprintf("column_name LIKE '%s'", likePattern))
+			}
+
+			// Query returns count of unwanted columns that exist
+			sqlQuery := fmt.Sprintf(`select count(*)
+				from information_schema.columns
+				where table_schema = '%s'
+				and table_name = '%s'
+				and (%s)`, schema, table, strings.Join(conditions, " or "))
+
+			return sqlQuery, nil
+		}
 	}
 
 	if check.ParsedCheck == nil {

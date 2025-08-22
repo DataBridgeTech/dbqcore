@@ -297,6 +297,89 @@ func TestMySQLAdapter_InterpretDataQualityCheck(t *testing.T) {
 			errorMessage: "dataset must be in format database.table",
 		},
 		{
+			name: "columns_not_present check with column list",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Columns: []string{"credit_card_number", "ssn", "password"},
+					},
+				},
+			},
+			dataset:     "mydb.users",
+			whereClause: "",
+			expectedSQL: `select count(*)
+				from information_schema.columns
+				where table_schema = 'mydb'
+				and table_name = 'users'
+				and (column_name = 'credit_card_number' or column_name = 'ssn' or column_name = 'password')`,
+		},
+		{
+			name: "columns_not_present check with pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Pattern: "temp_*",
+					},
+				},
+			},
+			dataset:     "shop.products",
+			whereClause: "",
+			expectedSQL: `select count(*)
+				from information_schema.columns
+				where table_schema = 'shop'
+				and table_name = 'products'
+				and (column_name LIKE 'temp_%')`,
+		},
+		{
+			name: "columns_not_present check with both columns and pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Columns: []string{"pan", "cvv"},
+						Pattern: "card_*",
+					},
+				},
+			},
+			dataset:     "ecommerce.orders",
+			whereClause: "",
+			expectedSQL: `select count(*)
+				from information_schema.columns
+				where table_schema = 'ecommerce'
+				and table_name = 'orders'
+				and (column_name = 'pan' or column_name = 'cvv' or column_name LIKE 'card_%')`,
+		},
+		{
+			name: "columns_not_present check with neither columns nor pattern",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{},
+				},
+			},
+			dataset:      "test.table",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "columns_not_present check requires either 'columns' list or 'pattern'",
+		},
+		{
+			name: "columns_not_present check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "columns_not_present",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ColumnsNotPresent: &dbqcore.ColumnsNotPresentConfig{
+						Pattern: "debug_*",
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
+		},
+		{
 			name: "unknown function fallback",
 			check: &dbqcore.DataQualityCheck{
 				Expression:  "custom_function(col1, col2) > 100",

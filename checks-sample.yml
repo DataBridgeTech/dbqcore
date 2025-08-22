@@ -16,6 +16,8 @@
 #   - stddev: Standard deviation of values in a column
 #   - avgWeighted: Weighted average with custom weight parameter
 #   - expect_columns_ordered: Validate table columns match an ordered list
+#   - expect_columns: Validate table has one of columns from unordered list
+#   - columns_not_present: Validate table doesn't have any columns from the list or matching pattern
 #   - raw_query: Custom SQL query for complex validations
 #
 # Operators supported:
@@ -40,6 +42,13 @@ rules:
           expect_columns:
             columns: [trip_id, fare_amount]
         desc: "Ensure required columns exist"
+        on_fail: error
+
+      - schema_check:
+          columns_not_present:
+            columns: [credit_card_number, credit_card_cvv]
+            pattern: "pii_*"
+        desc: "Ensure PII and credit card info is not present in the table"
         on_fail: error
       
       # table-level checks

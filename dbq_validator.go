@@ -121,6 +121,18 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 			} else {
 				result.Pass = true
 			}
+		} else if check.SchemaCheck.ColumnsNotPresent != nil {
+			// For columns_not_present, the count should be 0 (no unwanted columns should exist)
+			actualCount, err := strconv.Atoi(queryResult)
+			if err != nil {
+				result.Pass = false
+				result.Error = fmt.Sprintf("Check failed: %s invalid result: %s", check.Expression, queryResult)
+			} else if actualCount > 0 {
+				result.Pass = false
+				result.Error = fmt.Sprintf("Check failed: %s found %d unwanted columns", check.Expression, actualCount)
+			} else {
+				result.Pass = true
+			}
 		} else {
 			// Unknown schema check type, default to pass
 			result.Pass = true

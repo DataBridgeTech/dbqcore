@@ -52,6 +52,7 @@ type DataQualityCheck struct {
 type SchemaCheckConfig struct {
 	ExpectColumnsOrdered *ExpectColumnsOrderedConfig `yaml:"expect_columns_ordered,omitempty"`
 	ExpectColumns        *ExpectColumnsConfig        `yaml:"expect_columns,omitempty"`
+	ColumnsNotPresent    *ColumnsNotPresentConfig    `yaml:"columns_not_present,omitempty"`
 }
 
 type ExpectColumnsOrderedConfig struct {
@@ -60,6 +61,11 @@ type ExpectColumnsOrderedConfig struct {
 
 type ExpectColumnsConfig struct {
 	Columns []string `yaml:"columns"`
+}
+
+type ColumnsNotPresentConfig struct {
+	Columns []string `yaml:"columns,omitempty"`
+	Pattern string   `yaml:"pattern,omitempty"`
 }
 
 func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
@@ -91,6 +97,8 @@ func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
 					c.Expression = "expect_columns_ordered"
 				} else if c.SchemaCheck.ExpectColumns != nil {
 					c.Expression = "expect_columns"
+				} else if c.SchemaCheck.ColumnsNotPresent != nil {
+					c.Expression = "columns_not_present"
 				}
 				// ParsedCheck should be nil - the SchemaCheck field contains all needed info
 			}
