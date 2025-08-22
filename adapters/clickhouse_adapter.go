@@ -43,26 +43,45 @@ func NewClickhouseDbqDataSourceAdapter(cnn driver.Conn, logger *slog.Logger) dbq
 
 func (a *ClickhouseDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.DataQualityCheck, dataset string, whereClause string) (string, error) {
 	// handle schema checks first
-	if check.SchemaCheck != nil && check.SchemaCheck.ExpectColumnsOrdered != nil {
+	if check.SchemaCheck != nil {
 		database, table, err := extractDatabaseAndTableFromDataset(dataset)
 		if err != nil {
 			return "", err
 		}
 
-		expectedColumns := check.SchemaCheck.ExpectColumnsOrdered.ColumnsOrder
-		columnChecks := make([]string, len(expectedColumns))
-		for i, col := range expectedColumns {
-			columnChecks[i] = fmt.Sprintf("(name = '%s' and position = %d)", col, i+1)
+		if check.SchemaCheck.ExpectColumnsOrdered != nil {
+			expectedColumns := check.SchemaCheck.ExpectColumnsOrdered.ColumnsOrder
+			columnChecks := make([]string, len(expectedColumns))
+			for i, col := range expectedColumns {
+				columnChecks[i] = fmt.Sprintf("(name = '%s' and position = %d)", col, i+1)
+			}
+
+			// count of matching columns in correct positions
+			sqlQuery := fmt.Sprintf(`select count()
+				from system.columns
+				where database = '%s'
+				and table = '%s'
+				and (%s)`, database, table, strings.Join(columnChecks, " or "))
+
+			return sqlQuery, nil
 		}
 
-		// count of matching columns in correct positions
-		sqlQuery := fmt.Sprintf(`select count()
-			from system.columns
-			where database = '%s'
-			and table = '%s'
-			and (%s)`, database, table, strings.Join(columnChecks, " or "))
+		if check.SchemaCheck.ExpectColumns != nil {
+			// Query returns count of matching columns
+			expectedColumns := check.SchemaCheck.ExpectColumns.Columns
+			columnChecks := make([]string, len(expectedColumns))
+			for i, col := range expectedColumns {
+				columnChecks[i] = fmt.Sprintf("name = '%s'", col)
+			}
 
-		return sqlQuery, nil
+			sqlQuery := fmt.Sprintf(`select count()
+				from system.columns
+				where database = '%s'
+				and table = '%s'
+				and (%s)`, database, table, strings.Join(columnChecks, " or "))
+
+			return sqlQuery, nil
+		}
 	}
 
 	if check.ParsedCheck == nil {

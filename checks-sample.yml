@@ -35,7 +35,13 @@ rules:
             columns_order: [trip_id, pickup_datetime, dropoff_datetime, trip_distance, fare_amount]
         desc: "Ensure table columns are in the expected order"
         on_fail: error
-
+      
+      - schema_check:
+          expect_columns:
+            columns: [trip_id, fare_amount]
+        desc: "Ensure required columns exist"
+        on_fail: error
+      
       # table-level checks
       - row_count between 1000 and 50000:
           desc: "Dataset should contain a reasonable number of trips"
@@ -97,6 +103,12 @@ rules:
         desc: "Validate expected column order for data consistency"
         on_fail: warn
       
+      - schema_check:
+          expect_columns:
+            columns: [transaction_id, price, property_type]
+        desc: "Ensure critical columns exist"
+        on_fail: error
+      
       - row_count() between 100 and 100000:
           desc: "Recent property transactions should be within expected volume"
       
@@ -132,6 +144,12 @@ rules:
           expect_columns_ordered:
             columns: [order_id, customer_id, order_status, total_amount, item_count, created_at, shipped_date]
         desc: "Ensure order table maintains expected column structure"
+        on_fail: error
+      
+      - schema_check:
+          expect_columns:
+            columns: [order_id, customer_id, order_status, total_amount]
+        desc: "Ensure essential order columns exist"
         on_fail: error
       
       # order volume validation

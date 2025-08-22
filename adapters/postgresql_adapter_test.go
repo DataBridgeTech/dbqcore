@@ -207,10 +207,10 @@ func TestPostgreSQLAdapter_InterpretDataQualityCheck(t *testing.T) {
 			dataset:     "public.users",
 			whereClause: "",
 			expectedSQL: `select count(*)
-			from information_schema.columns
-			where table_schema = 'public'
-			and table_name = 'users'
-			and ((column_name = 'id' and ordinal_position = 1) or (column_name = 'name' and ordinal_position = 2) or (column_name = 'email' and ordinal_position = 3))`,
+				from information_schema.columns
+				where table_schema = 'public'
+				and table_name = 'users'
+				and ((column_name = 'id' and ordinal_position = 1) or (column_name = 'name' and ordinal_position = 2) or (column_name = 'email' and ordinal_position = 3))`,
 		},
 		{
 			name: "expect_columns_ordered check with single column",
@@ -225,10 +225,10 @@ func TestPostgreSQLAdapter_InterpretDataQualityCheck(t *testing.T) {
 			dataset:     "mydb.products",
 			whereClause: "",
 			expectedSQL: `select count(*)
-			from information_schema.columns
-			where table_schema = 'mydb'
-			and table_name = 'products'
-			and ((column_name = 'id' and ordinal_position = 1))`,
+				from information_schema.columns
+				where table_schema = 'mydb'
+				and table_name = 'products'
+				and ((column_name = 'id' and ordinal_position = 1))`,
 		},
 		{
 			name: "expect_columns_ordered check invalid dataset format",
@@ -237,6 +237,57 @@ func TestPostgreSQLAdapter_InterpretDataQualityCheck(t *testing.T) {
 				SchemaCheck: &dbqcore.SchemaCheckConfig{
 					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
 						ColumnsOrder: []string{"id", "name"},
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
+		},
+		{
+			name: "expect_columns check with multiple columns",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"user_id", "email", "created_at"},
+					},
+				},
+			},
+			dataset:     "public.users",
+			whereClause: "",
+			expectedSQL: `select count(*)
+				from information_schema.columns
+				where table_schema = 'public'
+				and table_name = 'users'
+				and (column_name = 'user_id' or column_name = 'email' or column_name = 'created_at')`,
+		},
+		{
+			name: "expect_columns check with single column",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"id"},
+					},
+				},
+			},
+			dataset:     "mydb.products",
+			whereClause: "",
+			expectedSQL: `select count(*)
+				from information_schema.columns
+				where table_schema = 'mydb'
+				and table_name = 'products'
+				and (column_name = 'id')`,
+		},
+		{
+			name: "expect_columns check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"id", "name"},
 					},
 				},
 			},

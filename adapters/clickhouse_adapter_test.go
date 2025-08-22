@@ -207,10 +207,10 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 			dataset:     "default.users",
 			whereClause: "",
 			expectedSQL: `select count()
-			from system.columns
-			where database = 'default'
-			and table = 'users'
-			and ((name = 'id' and position = 1) or (name = 'name' and position = 2) or (name = 'email' and position = 3))`,
+				from system.columns
+				where database = 'default'
+				and table = 'users'
+				and ((name = 'id' and position = 1) or (name = 'name' and position = 2) or (name = 'email' and position = 3))`,
 		},
 		{
 			name: "expect_columns_ordered check with single column",
@@ -225,10 +225,10 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 			dataset:     "analytics.events",
 			whereClause: "",
 			expectedSQL: `select count()
-			from system.columns
-			where database = 'analytics'
-			and table = 'events'
-			and ((name = 'id' and position = 1))`,
+				from system.columns
+				where database = 'analytics'
+				and table = 'events'
+				and ((name = 'id' and position = 1))`,
 		},
 		{
 			name: "expect_columns_ordered check invalid dataset format",
@@ -237,6 +237,57 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 				SchemaCheck: &dbqcore.SchemaCheckConfig{
 					ExpectColumnsOrdered: &dbqcore.ExpectColumnsOrderedConfig{
 						ColumnsOrder: []string{"id", "name"},
+					},
+				},
+			},
+			dataset:      "invalid_dataset",
+			whereClause:  "",
+			expectError:  true,
+			errorMessage: "dataset must be in format database.table",
+		},
+		{
+			name: "expect_columns check with multiple columns",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"event_id", "user_id", "timestamp"},
+					},
+				},
+			},
+			dataset:     "analytics.events",
+			whereClause: "",
+			expectedSQL: `select count()
+				from system.columns
+				where database = 'analytics'
+				and table = 'events'
+				and (name = 'event_id' or name = 'user_id' or name = 'timestamp')`,
+		},
+		{
+			name: "expect_columns check with two columns",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"metric_name", "value"},
+					},
+				},
+			},
+			dataset:     "metrics.timeseries",
+			whereClause: "",
+			expectedSQL: `select count()
+				from system.columns
+				where database = 'metrics'
+				and table = 'timeseries'
+				and (name = 'metric_name' or name = 'value')`,
+		},
+		{
+			name: "expect_columns check invalid dataset format",
+			check: &dbqcore.DataQualityCheck{
+				Expression: "expect_columns",
+				SchemaCheck: &dbqcore.SchemaCheckConfig{
+					ExpectColumns: &dbqcore.ExpectColumnsConfig{
+						Columns: []string{"id", "name"},
 					},
 				},
 			},

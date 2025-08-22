@@ -97,7 +97,38 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 		"duration_ms", elapsed)
 
 	result.QueryResultValue = queryResult
-	result.Pass = d.validateResult(queryResult, check.ParsedCheck)
+
+	// Handle schema checks specially
+	if check.SchemaCheck != nil {
+		// For schema checks, we expect the count to match the expected value
+		if check.SchemaCheck.ExpectColumnsOrdered != nil {
+			// For expect_columns_ordered, the count should match the number of expected columns
+			expectedCount := len(check.SchemaCheck.ExpectColumnsOrdered.ColumnsOrder)
+			actualCount, err := strconv.Atoi(queryResult)
+			if err != nil || actualCount != expectedCount {
+				result.Pass = false
+				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %s)", check.Expression, expectedCount, queryResult)
+			} else {
+				result.Pass = true
+			}
+		} else if check.SchemaCheck.ExpectColumns != nil {
+			// For expect_columns, the count should match the number of expected columns
+			expectedCount := len(check.SchemaCheck.ExpectColumns.Columns)
+			actualCount, err := strconv.Atoi(queryResult)
+			if err != nil || actualCount != expectedCount {
+				result.Pass = false
+				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %s)", check.Expression, expectedCount, queryResult)
+			} else {
+				result.Pass = true
+			}
+		} else {
+			// Unknown schema check type, default to pass
+			result.Pass = true
+		}
+	} else {
+		// Regular checks use the existing validation logic
+		result.Pass = d.validateResult(queryResult, check.ParsedCheck)
+	}
 
 	return result
 }

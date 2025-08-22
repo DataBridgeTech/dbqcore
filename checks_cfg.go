@@ -51,10 +51,15 @@ type DataQualityCheck struct {
 
 type SchemaCheckConfig struct {
 	ExpectColumnsOrdered *ExpectColumnsOrderedConfig `yaml:"expect_columns_ordered,omitempty"`
+	ExpectColumns        *ExpectColumnsConfig        `yaml:"expect_columns,omitempty"`
 }
 
 type ExpectColumnsOrderedConfig struct {
 	ColumnsOrder []string `yaml:"columns_order"`
+}
+
+type ExpectColumnsConfig struct {
+	Columns []string `yaml:"columns"`
 }
 
 func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
@@ -81,9 +86,13 @@ func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
 			c.OnFail = temp.OnFail
 
 			// For schema checks, we set the Expression but don't create ParsedCheck
-			if c.SchemaCheck != nil && c.SchemaCheck.ExpectColumnsOrdered != nil {
-				c.Expression = "expect_columns_ordered"
-				// ParsedCheck remains nil - the SchemaCheck field contains all needed info
+			if c.SchemaCheck != nil {
+				if c.SchemaCheck.ExpectColumnsOrdered != nil {
+					c.Expression = "expect_columns_ordered"
+				} else if c.SchemaCheck.ExpectColumns != nil {
+					c.Expression = "expect_columns"
+				}
+				// ParsedCheck should be nil - the SchemaCheck field contains all needed info
 			}
 		} else if key == "raw_query" {
 			c.Expression = key
