@@ -124,7 +124,7 @@ func (a *MysqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcore.Dat
 	parsed := check.ParsedCheck
 
 	// handle raw_query checks
-	if parsed.FunctionName == "raw_query" {
+	if parsed.FunctionName == dbqcore.CheckTypeRawQuery {
 		if check.Query == "" {
 			return "", fmt.Errorf("raw_query check requires a 'query' field")
 		}

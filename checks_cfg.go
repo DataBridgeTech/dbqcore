@@ -102,7 +102,7 @@ func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
 				}
 				// ParsedCheck should be nil - the SchemaCheck field contains all needed info
 			}
-		} else if key == "raw_query" {
+		} else if key == CheckTypeRawQuery {
 			c.Expression = key
 			var rawQueryCheck struct {
 				Desc   string       `yaml:"desc,omitempty"`
@@ -116,7 +116,7 @@ func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
 			c.Query = rawQueryCheck.Query
 			c.OnFail = rawQueryCheck.OnFail
 
-			parsedCheck, err := ParseCheckExpression("raw_query")
+			parsedCheck, err := ParseCheckExpression(CheckTypeRawQuery)
 			if err != nil {
 				return err
 			}

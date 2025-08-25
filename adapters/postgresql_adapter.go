@@ -124,7 +124,7 @@ func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 	parsed := check.ParsedCheck
 
 	// Handle raw_query checks
-	if parsed.FunctionName == "raw_query" {
+	if parsed.FunctionName == dbqcore.CheckTypeRawQuery {
 		if check.Query == "" {
 			return "", fmt.Errorf("raw_query check requires a 'query' field")
 		}
