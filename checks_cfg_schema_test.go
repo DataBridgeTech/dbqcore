@@ -128,27 +128,6 @@ schema_check:
 			// Validate ParsedCheck
 			if tt.expectedCheck.ParsedCheck != nil {
 				t.Errorf("ParsedCheck is non-nil, expected nil for schema checks")
-
-				//if check.ParsedCheck == nil {
-				//	t.Errorf("ParsedCheck is nil, expected non-nil")
-				//} else {
-				//	if check.ParsedCheck.FunctionName != tt.expectedCheck.ParsedCheck.FunctionName {
-				//		t.Errorf("ParsedCheck.FunctionName mismatch: got %s, want %s",
-				//			check.ParsedCheck.FunctionName, tt.expectedCheck.ParsedCheck.FunctionName)
-				//	}
-				//	if check.ParsedCheck.Scope != tt.expectedCheck.ParsedCheck.Scope {
-				//		t.Errorf("ParsedCheck.Scope mismatch: got %s, want %s",
-				//			check.ParsedCheck.Scope, tt.expectedCheck.ParsedCheck.Scope)
-				//	}
-				//	if check.ParsedCheck.Operator != tt.expectedCheck.ParsedCheck.Operator {
-				//		t.Errorf("ParsedCheck.Operator mismatch: got %s, want %s",
-				//			check.ParsedCheck.Operator, tt.expectedCheck.ParsedCheck.Operator)
-				//	}
-				//	if check.ParsedCheck.ThresholdValue != tt.expectedCheck.ParsedCheck.ThresholdValue {
-				//		t.Errorf("ParsedCheck.ThresholdValue mismatch: got %v, want %v",
-				//			check.ParsedCheck.ThresholdValue, tt.expectedCheck.ParsedCheck.ThresholdValue)
-				//	}
-				//}
 			}
 		})
 	}
@@ -217,15 +196,4 @@ rules:
 	if schemaCheck.ParsedCheck != nil {
 		t.Errorf("ParsedCheck should not be present")
 	}
-
-	//else {
-	//	if schemaCheck.ParsedCheck.FunctionName != "expect_columns_ordered" {
-	//		t.Errorf("ParsedCheck FunctionName mismatch: got %s",
-	//			schemaCheck.ParsedCheck.FunctionName)
-	//	}
-	//	if schemaCheck.ParsedCheck.Scope != ScopeSchema {
-	//		t.Errorf("ParsedCheck Scope mismatch: got %s",
-	//			schemaCheck.ParsedCheck.Scope)
-	//	}
-	//}
 }

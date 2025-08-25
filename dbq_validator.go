@@ -34,8 +34,8 @@ type ValidationResult struct {
 }
 
 const (
-	// CheckTypeRawQuery is a data quality check that uses a raw SQL query.
-	CheckTypeRawQuery = "raw_query"
+	CheckTypeSchemaCheck = "schema_check"
+	CheckTypeRawQuery    = "raw_query"
 )
 
 // DbqDataValidator is the interface that wraps the basic data validation methods.
@@ -51,8 +51,6 @@ type DbqDataSourceAdapter interface {
 	// ExecuteQuery executes the SQL query and returns the query result
 	ExecuteQuery(ctx context.Context, query string) (string, error)
 }
-
-//
 
 func NewDbqDataValidator(logger *slog.Logger) DbqDataValidator {
 	return &DbqDataValidatorImpl{logger: logger}

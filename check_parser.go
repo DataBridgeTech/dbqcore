@@ -58,9 +58,10 @@ var (
 		"stddev":     true,
 	}
 
-	// reserved for schema checks
 	schemaScopeFunctions = map[string]bool{
-		// Schema checks are now handled via schema_check config format
+		"expect_columns":         true,
+		"expect_columns_ordered": true,
+		"columns_not_present":    true,
 	}
 )
 

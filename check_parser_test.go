@@ -409,9 +409,24 @@ func TestInferScope(t *testing.T) {
 			expected:     ScopeColumn,
 		},
 		{
-			name:         "schema scope function",
+			name:         "table scope function - raw_query",
 			functionName: "raw_query",
 			expected:     ScopeTable,
+		},
+		{
+			name:         "schema scope function - expect_columns",
+			functionName: "expect_columns",
+			expected:     ScopeSchema,
+		},
+		{
+			name:         "schema scope function - expect_columns_ordered",
+			functionName: "expect_columns_ordered",
+			expected:     ScopeSchema,
+		},
+		{
+			name:         "schema scope function - columns_not_present",
+			functionName: "columns_not_present",
+			expected:     ScopeSchema,
 		},
 		{
 			name:         "unknown function defaults to column",

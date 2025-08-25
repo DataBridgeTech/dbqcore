@@ -1,7 +1,6 @@
 package dbqcore
 
 import (
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -280,7 +279,7 @@ rules:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpFile, err := ioutil.TempFile("", "test-config-*.yml")
+			tmpFile, err := os.CreateTemp("", "dbqcore-test-config-*.yml")
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}

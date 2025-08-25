@@ -3,8 +3,6 @@ package dbqcore
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"testing"
 )
 
@@ -34,9 +32,6 @@ func (m *MockColumnsNotPresentAdapter) ExecuteQuery(ctx context.Context, query s
 }
 
 func TestValidateColumnsNotPresent(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	_ = NewDbqDataValidator(logger) // Create validator but not used in this test
-
 	tests := []struct {
 		name          string
 		check         *DataQualityCheck
@@ -144,9 +139,6 @@ func TestValidateColumnsNotPresent(t *testing.T) {
 }
 
 func TestColumnsNotPresentWithRealValidator(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	_ = logger // unused variable but kept for consistency
-
 	tests := []struct {
 		name          string
 		queryResult   string
@@ -200,9 +192,6 @@ func TestColumnsNotPresentWithRealValidator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock adapter that just returns our test query result
-			_ = &MockColumnsNotPresentAdapter{}
-
 			// Create result and manually simulate validation logic since we can't easily mock the full flow
 			result := ValidationResult{
 				CheckID:          tt.check.Expression,

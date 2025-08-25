@@ -6,7 +6,14 @@
 #   - column: Operations on specific columns (not_null, uniqueness, freshness, min, max, etc.)
 #
 # Available check functions:
+# Schema:
+#   - expect_columns_ordered: Validate table columns match an ordered list
+#   - expect_columns: Validate table has one of columns from unordered list
+#   - columns_not_present: Validate table doesn't have any columns from the list or matching pattern
+# Table:
 #   - row_count: Count of rows in the table
+#   - raw_query: Custom SQL query for complex validations
+# Column:
 #   - not_null: Check for null values in a column
 #   - freshness: Check data recency based on timestamp column
 #   - uniqueness: Check for unique values in a column
@@ -14,11 +21,6 @@
 #   - sum: Sum of values in a column
 #   - avg: Average of values in a column
 #   - stddev: Standard deviation of values in a column
-#   - avgWeighted: Weighted average with custom weight parameter
-#   - expect_columns_ordered: Validate table columns match an ordered list
-#   - expect_columns: Validate table has one of columns from unordered list
-#   - columns_not_present: Validate table doesn't have any columns from the list or matching pattern
-#   - raw_query: Custom SQL query for complex validations
 #
 # Operators supported:
 #   - Comparison: <, >, <=, >=, ==, !=
@@ -91,10 +93,6 @@ rules:
       - sum(fare_amount) between 10000 and 10000000:
           desc: "Total fare amount should be within expected range"
       
-      # example of custom weighted average
-      - avgWeighted(fare_amount, trip_distance) between 2.0 and 15.0:
-          desc: "Weighted average fare per distance should be reasonable"
-
       # custom validation with raw query
       - raw_query:
           desc: "Check for trips with zero distance but positive fare"

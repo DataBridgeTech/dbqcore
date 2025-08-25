@@ -73,7 +73,7 @@ func (c *DataQualityCheck) UnmarshalYAML(node *yaml.Node) error {
 		key := node.Content[0].Value
 		value := node.Content[1]
 
-		if key == "schema_check" {
+		if key == CheckTypeSchemaCheck {
 			// Handle schema_check format
 			type tempCheck struct {
 				SchemaCheck *SchemaCheckConfig `yaml:"schema_check"`

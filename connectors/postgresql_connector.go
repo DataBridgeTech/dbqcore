@@ -43,17 +43,17 @@ func (c *PostgresqlDbqConnector) Ping(ctx context.Context) (string, error) {
 
 func (c *PostgresqlDbqConnector) ImportDatasets(ctx context.Context, filter string) ([]string, error) {
 	query := `
-		SELECT table_schema, table_name
-		FROM information_schema.tables
-		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+		select table_schema, table_name
+		from information_schema.tables
+		where table_schema not in ('pg_catalog', 'information_schema')
 	`
 
 	var args []interface{}
 	if filter != "" {
-		query += " AND (table_schema LIKE $1 OR table_name LIKE $1)"
+		query += " and (table_schema like $1 or table_name like $1)"
 		args = append(args, fmt.Sprintf("%%%s%%", filter))
 	}
-	query += " ORDER BY table_schema, table_name"
+	query += " order by table_schema, table_name"
 
 	rows, err := c.db.QueryContext(ctx, query, args...)
 	if err != nil {

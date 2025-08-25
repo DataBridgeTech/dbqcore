@@ -42,17 +42,17 @@ func (c *MysqlDbqConnector) Ping(ctx context.Context) (string, error) {
 
 func (c *MysqlDbqConnector) ImportDatasets(ctx context.Context, filter string) ([]string, error) {
 	query := `
-		SELECT table_schema, table_name
-		FROM information_schema.tables
-		WHERE table_schema NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
+		select table_schema, table_name
+		from information_schema.tables
+		where table_schema not in ('mysql', 'information_schema', 'performance_schema', 'sys')
 	`
 
 	var args []interface{}
 	if filter != "" {
-		query += " AND (table_schema LIKE ? OR table_name LIKE ?)"
+		query += " and (table_schema like ? or table_name like ?)"
 		args = append(args, fmt.Sprintf("%%%s%%", filter), fmt.Sprintf("%%%s%%", filter))
 	}
-	query += " ORDER BY table_schema, table_name"
+	query += " order by table_schema, table_name"
 
 	rows, err := c.db.QueryContext(ctx, query, args...)
 	if err != nil {

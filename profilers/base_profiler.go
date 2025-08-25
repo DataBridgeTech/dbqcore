@@ -106,7 +106,7 @@ func (p *BaseProfiler) ProfileDataset(ctx context.Context, dataset string, sampl
 			ColumnPosition: column.Position,
 		}
 
-		taskIdPrefix := fmt.Sprintf("task:%s:", column.Name)
+		taskIdPrefix := fmt.Sprintf("task:%s:%s:", dataset, column.Name)
 
 		enqueueTask(taskPool, &colWg, taskIdPrefix+"null_count", func() error {
 			nullCount, err := p.profilerImpl.GetNullCount(ctx, dataset, column)
