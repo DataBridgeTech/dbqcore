@@ -94,7 +94,13 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 		"check_expression", check.Expression,
 		"duration_ms", elapsed)
 
-	result.QueryResultValue = fmt.Sprintf("%v", queryResult)
+	// convert queryResult to string for display
+	switch v := queryResult.(type) {
+	case []byte:
+		result.QueryResultValue = string(v)
+	default:
+		result.QueryResultValue = fmt.Sprintf("%v", queryResult)
+	}
 
 	// Handle schema checks specially
 	if check.SchemaCheck != nil {
@@ -188,7 +194,14 @@ func (d DbqDataValidatorImpl) validateResult(queryResult interface{}, parsedChec
 
 // validateStringResult handles string-based comparisons when numeric parsing fails
 func (d DbqDataValidatorImpl) validateStringResult(queryResult interface{}, parsedCheck *CheckExpression) bool {
-	queryResultStr := fmt.Sprintf("%v", queryResult)
+	var queryResultStr string
+	switch v := queryResult.(type) {
+	case []byte:
+		queryResultStr = string(v)
+	default:
+		queryResultStr = fmt.Sprintf("%v", queryResult)
+	}
+
 	switch parsedCheck.Operator {
 	case "==", "=":
 		if thresholdStr, ok := parsedCheck.ThresholdValue.(string); ok {
@@ -337,6 +350,9 @@ func (d DbqDataValidatorImpl) convertToFloat64(value interface{}) (float64, erro
 		return float64(v), nil
 	case string:
 		return strconv.ParseFloat(v, 64)
+	case []byte:
+		// Handle byte arrays from PostgreSQL/MySQL drivers
+		return strconv.ParseFloat(string(v), 64)
 	default:
 		return 0, fmt.Errorf("unsupported type: %T", value)
 	}
@@ -371,6 +387,9 @@ func (d DbqDataValidatorImpl) convertToInt(value interface{}) (int, error) {
 		return int(v), nil
 	case string:
 		return strconv.Atoi(v)
+	case []byte:
+		// Handle byte arrays from PostgreSQL/MySQL drivers
+		return strconv.Atoi(string(v))
 	default:
 		return 0, fmt.Errorf("unsupported type: %T", value)
 	}

@@ -106,13 +106,14 @@ rules:
       # schema validation
       - schema_check:
           expect_columns_ordered:
-            columns: [transaction_id, price, transfer_date, property_type, address]
+            columns_order: [transaction, price, transfer_date, postcode, property_type, newly_built, duration, paon, saon,
+                            street, locality, city, district, county, ppd_category_type, record_status]
         desc: "Validate expected column order for data consistency"
         on_fail: warn
       
       - schema_check:
           expect_columns:
-            columns: [transaction_id, price, property_type]
+            columns: [transaction, price, property_type]
         desc: "Ensure critical columns exist"
         on_fail: error
       
@@ -133,7 +134,7 @@ rules:
       
       # property type validations
       - not_null(property_type)
-      - uniqueness(transaction_id):
+      - uniqueness(transaction):
           desc: "Each transaction must have a unique identifier"
           on_fail: error
       
@@ -149,7 +150,7 @@ rules:
       # schema validation  
       - schema_check:
           expect_columns_ordered:
-            columns: [order_id, customer_id, order_status, total_amount, item_count, created_at, shipped_date]
+            columns_order: [order_id, customer_id, order_status, total_amount, item_count, created_at, shipped_date]
         desc: "Ensure order table maintains expected column structure"
         on_fail: error
       

@@ -16,6 +16,7 @@ package dbqcore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -141,8 +142,9 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 				t.Errorf("Expected Pass = %v, got %v", tt.expectedPass, result.Pass)
 			}
 
-			if result.QueryResultValue != tt.queryResult {
-				t.Errorf("Expected QueryResultValue = %s, got %s", tt.queryResult, result.QueryResultValue)
+			expectedStr := fmt.Sprintf("%v", tt.queryResult)
+			if result.QueryResultValue != expectedStr {
+				t.Errorf("Expected QueryResultValue = %s, got %s", expectedStr, result.QueryResultValue)
 			}
 
 			if result.CheckID != tt.check.Expression {
