@@ -23,7 +23,7 @@ import (
 
 // MockAdapter for testing the validation logic
 type MockAdapter struct {
-	queryResult string
+	queryResult interface{}
 	queryError  error
 }
 
@@ -31,7 +31,7 @@ func (m *MockAdapter) InterpretDataQualityCheck(check *DataQualityCheck, dataset
 	return "SELECT COUNT(*) FROM " + dataset, nil
 }
 
-func (m *MockAdapter) ExecuteQuery(ctx context.Context, query string) (string, error) {
+func (m *MockAdapter) ExecuteQuery(ctx context.Context, query string) (interface{}, error) {
 	return m.queryResult, m.queryError
 }
 
@@ -41,7 +41,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 	tests := []struct {
 		name         string
 		check        *DataQualityCheck
-		queryResult  string
+		queryResult  interface{}
 		expectedPass bool
 	}{
 		{
@@ -54,7 +54,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: 100,
 				},
 			},
-			queryResult:  "150",
+			queryResult:  150,
 			expectedPass: true,
 		},
 		{
@@ -67,7 +67,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: 100,
 				},
 			},
-			queryResult:  "50",
+			queryResult:  50,
 			expectedPass: false,
 		},
 		{
@@ -80,7 +80,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: BetweenRange{Min: 3.0, Max: 5.0},
 				},
 			},
-			queryResult:  "4.2",
+			queryResult:  4.2,
 			expectedPass: true,
 		},
 		{
@@ -93,7 +93,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: BetweenRange{Min: 3.0, Max: 5.0},
 				},
 			},
-			queryResult:  "6.0",
+			queryResult:  6.0,
 			expectedPass: false,
 		},
 		{
@@ -106,7 +106,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: 3600,
 				},
 			},
-			queryResult:  "1800",
+			queryResult:  1800,
 			expectedPass: true,
 		},
 		{
@@ -119,7 +119,7 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 					ThresholdValue: 3600,
 				},
 			},
-			queryResult:  "7200",
+			queryResult:  7200,
 			expectedPass: false,
 		},
 	}

@@ -229,14 +229,14 @@ func (a *PostgresqlDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 	return sqlQuery, nil
 }
 
-func (a *PostgresqlDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (string, error) {
+func (a *PostgresqlDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (interface{}, error) {
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute query for check: %v", err)
 	}
 	defer rows.Close()
 
-	var queryResult string
+	var queryResult interface{}
 	for rows.Next() {
 		if err := rows.Scan(&queryResult); err != nil {
 			return "", fmt.Errorf("failed to scan result for check: %v", err)

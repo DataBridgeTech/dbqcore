@@ -49,7 +49,7 @@ type DbqDataSourceAdapter interface {
 	InterpretDataQualityCheck(check *DataQualityCheck, dataset string, defaultWhere string) (string, error)
 
 	// ExecuteQuery executes the SQL query and returns the query result
-	ExecuteQuery(ctx context.Context, query string) (string, error)
+	ExecuteQuery(ctx context.Context, query string) (interface{}, error)
 }
 
 func NewDbqDataValidator(logger *slog.Logger) DbqDataValidator {
@@ -94,7 +94,7 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 		"check_expression", check.Expression,
 		"duration_ms", elapsed)
 
-	result.QueryResultValue = queryResult
+	result.QueryResultValue = fmt.Sprintf("%v", queryResult)
 
 	// Handle schema checks specially
 	if check.SchemaCheck != nil {
@@ -102,29 +102,29 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 		if check.SchemaCheck.ExpectColumnsOrdered != nil {
 			// For expect_columns_ordered, the count should match the number of expected columns
 			expectedCount := len(check.SchemaCheck.ExpectColumnsOrdered.ColumnsOrder)
-			actualCount, err := strconv.Atoi(queryResult)
+			actualCount, err := d.convertToInt(queryResult)
 			if err != nil || actualCount != expectedCount {
 				result.Pass = false
-				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %s)", check.Expression, expectedCount, queryResult)
+				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %v)", check.Expression, expectedCount, queryResult)
 			} else {
 				result.Pass = true
 			}
 		} else if check.SchemaCheck.ExpectColumns != nil {
 			// For expect_columns, the count should match the number of expected columns
 			expectedCount := len(check.SchemaCheck.ExpectColumns.Columns)
-			actualCount, err := strconv.Atoi(queryResult)
+			actualCount, err := d.convertToInt(queryResult)
 			if err != nil || actualCount != expectedCount {
 				result.Pass = false
-				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %s)", check.Expression, expectedCount, queryResult)
+				result.Error = fmt.Sprintf("Check failed: %s == %d (got: %v)", check.Expression, expectedCount, queryResult)
 			} else {
 				result.Pass = true
 			}
 		} else if check.SchemaCheck.ColumnsNotPresent != nil {
 			// For columns_not_present, the count should be 0 (no unwanted columns should exist)
-			actualCount, err := strconv.Atoi(queryResult)
+			actualCount, err := d.convertToInt(queryResult)
 			if err != nil {
 				result.Pass = false
-				result.Error = fmt.Sprintf("Check failed: %s invalid result: %s", check.Expression, queryResult)
+				result.Error = fmt.Sprintf("Check failed: %s invalid result: %v", check.Expression, queryResult)
 			} else if actualCount > 0 {
 				result.Pass = false
 				result.Error = fmt.Sprintf("Check failed: %s found %d unwanted columns", check.Expression, actualCount)
@@ -144,7 +144,7 @@ func (d DbqDataValidatorImpl) RunCheck(ctx context.Context, adapter DbqDataSourc
 }
 
 // validateResult checks if the query result meets the check criteria
-func (d DbqDataValidatorImpl) validateResult(queryResult string, parsedCheck *CheckExpression) bool {
+func (d DbqDataValidatorImpl) validateResult(queryResult interface{}, parsedCheck *CheckExpression) bool {
 	if parsedCheck == nil {
 		// If there's no parsed check, consider it a pass (raw queries without validation)
 		return true
@@ -152,11 +152,11 @@ func (d DbqDataValidatorImpl) validateResult(queryResult string, parsedCheck *Ch
 
 	// If there's no operator, just check if we got a result (for functions like raw_query)
 	if parsedCheck.Operator == "" {
-		return queryResult != ""
+		return queryResult != nil && fmt.Sprintf("%v", queryResult) != ""
 	}
 
 	// Convert query result to float64 for numeric comparisons
-	actualValue, err := strconv.ParseFloat(queryResult, 64)
+	actualValue, err := d.convertToFloat64(queryResult)
 	if err != nil {
 		d.logger.Warn("Failed to parse query result as number, treating as string comparison",
 			"result", queryResult,
@@ -187,22 +187,23 @@ func (d DbqDataValidatorImpl) validateResult(queryResult string, parsedCheck *Ch
 }
 
 // validateStringResult handles string-based comparisons when numeric parsing fails
-func (d DbqDataValidatorImpl) validateStringResult(queryResult string, parsedCheck *CheckExpression) bool {
+func (d DbqDataValidatorImpl) validateStringResult(queryResult interface{}, parsedCheck *CheckExpression) bool {
+	queryResultStr := fmt.Sprintf("%v", queryResult)
 	switch parsedCheck.Operator {
 	case "==", "=":
 		if thresholdStr, ok := parsedCheck.ThresholdValue.(string); ok {
-			return queryResult == thresholdStr
+			return queryResultStr == thresholdStr
 		}
-		return queryResult == fmt.Sprintf("%v", parsedCheck.ThresholdValue)
+		return queryResultStr == fmt.Sprintf("%v", parsedCheck.ThresholdValue)
 	case "!=", "<>":
 		if thresholdStr, ok := parsedCheck.ThresholdValue.(string); ok {
-			return queryResult != thresholdStr
+			return queryResultStr != thresholdStr
 		}
-		return queryResult != fmt.Sprintf("%v", parsedCheck.ThresholdValue)
+		return queryResultStr != fmt.Sprintf("%v", parsedCheck.ThresholdValue)
 	default:
 		d.logger.Warn("String comparison not supported for operator, defaulting to false",
 			"operator", parsedCheck.Operator,
-			"result", queryResult)
+			"result", queryResultStr)
 		return false
 	}
 }
@@ -336,6 +337,40 @@ func (d DbqDataValidatorImpl) convertToFloat64(value interface{}) (float64, erro
 		return float64(v), nil
 	case string:
 		return strconv.ParseFloat(v, 64)
+	default:
+		return 0, fmt.Errorf("unsupported type: %T", value)
+	}
+}
+
+// convertToInt converts various types to int
+func (d DbqDataValidatorImpl) convertToInt(value interface{}) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int8:
+		return int(v), nil
+	case int16:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case uint:
+		return int(v), nil
+	case uint8:
+		return int(v), nil
+	case uint16:
+		return int(v), nil
+	case uint32:
+		return int(v), nil
+	case uint64:
+		return int(v), nil
+	case float32:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	case string:
+		return strconv.Atoi(v)
 	default:
 		return 0, fmt.Errorf("unsupported type: %T", value)
 	}

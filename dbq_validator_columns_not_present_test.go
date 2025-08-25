@@ -17,18 +17,18 @@ func (m *MockColumnsNotPresentAdapter) InterpretDataQualityCheck(check *DataQual
 	return "", fmt.Errorf("not a columns_not_present check")
 }
 
-func (m *MockColumnsNotPresentAdapter) ExecuteQuery(ctx context.Context, query string) (string, error) {
+func (m *MockColumnsNotPresentAdapter) ExecuteQuery(ctx context.Context, query string) (interface{}, error) {
 	// Return different counts based on the query to test different scenarios
 	if query == "SELECT COUNT(*) FROM columns WHERE unwanted = true" {
-		return "0", nil // No unwanted columns found - check should pass
+		return 0, nil // No unwanted columns found - check should pass
 	}
 	if query == "SELECT COUNT(*) FROM columns WHERE unwanted = true WITH UNWANTED" {
-		return "3", nil // 3 unwanted columns found - check should fail
+		return 3, nil // 3 unwanted columns found - check should fail
 	}
 	if query == "SELECT COUNT(*) FROM columns WHERE unwanted = true WITH ERROR" {
 		return "invalid", nil // Invalid result - check should fail
 	}
-	return "0", nil
+	return 0, nil
 }
 
 func TestValidateColumnsNotPresent(t *testing.T) {
@@ -107,17 +107,18 @@ func TestValidateColumnsNotPresent(t *testing.T) {
 
 			// Validate result
 			result := ValidationResult{
-				QueryResultValue: queryResult,
+				QueryResultValue: fmt.Sprintf("%v", queryResult),
 			}
 
 			// Simulate the validator logic for columns_not_present
 			if tt.check.SchemaCheck != nil && tt.check.SchemaCheck.ColumnsNotPresent != nil {
 				count := 0
-				fmt.Sscanf(queryResult, "%d", &count)
+				queryResultStr := fmt.Sprintf("%v", queryResult)
+				fmt.Sscanf(queryResultStr, "%d", &count)
 
-				if queryResult == "invalid" {
+				if queryResultStr == "invalid" {
 					result.Pass = false
-					result.Error = fmt.Sprintf("Check failed: %s invalid result: %s", tt.check.Expression, queryResult)
+					result.Error = fmt.Sprintf("Check failed: %s invalid result: %s", tt.check.Expression, queryResultStr)
 				} else if count > 0 {
 					result.Pass = false
 					result.Error = fmt.Sprintf("Check failed: %s found %d unwanted columns", tt.check.Expression, count)

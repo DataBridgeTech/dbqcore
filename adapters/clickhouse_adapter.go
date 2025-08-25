@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -229,18 +230,28 @@ func (a *ClickhouseDbqDataSourceAdapter) InterpretDataQualityCheck(check *dbqcor
 	return sqlQuery, nil
 }
 
-func (a *ClickhouseDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (string, error) {
+func (a *ClickhouseDbqDataSourceAdapter) ExecuteQuery(ctx context.Context, query string) (interface{}, error) {
 	rows, err := a.cnn.Query(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute query for check: %v", err)
 	}
 	defer rows.Close()
 
-	var queryResult string
+	var queryResult interface{}
 	for rows.Next() {
-		if err := rows.Scan(&queryResult); err != nil {
-			return "", fmt.Errorf("failed to scan result for check: %v", err)
+		scanArgs := make([]interface{}, len(rows.Columns()))
+		for i, colType := range rows.ColumnTypes() {
+			scanType := colType.ScanType()
+			valuePtr := reflect.New(scanType).Interface()
+			scanArgs[i] = valuePtr
 		}
+
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			return "", err
+		}
+
+		queryResult = reflect.ValueOf(scanArgs[0]).Elem().Interface()
 	}
 
 	if err = rows.Err(); err != nil {

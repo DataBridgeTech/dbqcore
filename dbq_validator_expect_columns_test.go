@@ -10,7 +10,7 @@ import (
 // MockAdapterForExpectColumns is a test adapter for expect_columns checks
 type MockAdapterForExpectColumns struct {
 	expectedQuery string
-	returnValue   string
+	returnValue   interface{}
 	returnError   error
 }
 
@@ -22,7 +22,7 @@ func (m *MockAdapterForExpectColumns) InterpretDataQualityCheck(check *DataQuali
 	return "", nil
 }
 
-func (m *MockAdapterForExpectColumns) ExecuteQuery(ctx context.Context, query string) (string, error) {
+func (m *MockAdapterForExpectColumns) ExecuteQuery(ctx context.Context, query string) (interface{}, error) {
 	m.expectedQuery = query
 	return m.returnValue, m.returnError
 }
@@ -31,7 +31,7 @@ func TestDbqDataValidator_ExpectColumns(t *testing.T) {
 	tests := []struct {
 		name           string
 		check          DataQualityCheck
-		queryResult    string
+		queryResult    interface{}
 		expectedPassed bool
 		expectedReason string
 	}{
@@ -45,7 +45,7 @@ func TestDbqDataValidator_ExpectColumns(t *testing.T) {
 					},
 				},
 			},
-			queryResult:    "3",
+			queryResult:    3,
 			expectedPassed: true,
 			expectedReason: "",
 		},
@@ -60,7 +60,7 @@ func TestDbqDataValidator_ExpectColumns(t *testing.T) {
 					},
 				},
 			},
-			queryResult:    "2",
+			queryResult:    2,
 			expectedPassed: false,
 			expectedReason: "Check failed: expect_columns == 3 (got: 2)",
 		},
@@ -75,7 +75,7 @@ func TestDbqDataValidator_ExpectColumns(t *testing.T) {
 					},
 				},
 			},
-			queryResult:    "0",
+			queryResult:    0,
 			expectedPassed: false,
 			expectedReason: "Check failed: expect_columns == 2 (got: 0)",
 		},
@@ -89,7 +89,7 @@ func TestDbqDataValidator_ExpectColumns(t *testing.T) {
 					},
 				},
 			},
-			queryResult:    "1",
+			queryResult:    1,
 			expectedPassed: true,
 			expectedReason: "",
 		},
