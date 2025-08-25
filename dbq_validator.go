@@ -349,10 +349,9 @@ func (d DbqDataValidatorImpl) convertToFloat64(value interface{}) (float64, erro
 	case uint64:
 		return float64(v), nil
 	case string:
-		return strconv.ParseFloat(v, 64)
+		return d.tryParseTimeDurationOrFloat(v)
 	case []byte:
-		// Handle byte arrays from PostgreSQL/MySQL drivers
-		return strconv.ParseFloat(string(v), 64)
+		return d.tryParseTimeDurationOrFloat(string(v))
 	default:
 		return 0, fmt.Errorf("unsupported type: %T", value)
 	}
@@ -388,9 +387,38 @@ func (d DbqDataValidatorImpl) convertToInt(value interface{}) (int, error) {
 	case string:
 		return strconv.Atoi(v)
 	case []byte:
-		// Handle byte arrays from PostgreSQL/MySQL drivers
 		return strconv.Atoi(string(v))
 	default:
 		return 0, fmt.Errorf("unsupported type: %T", value)
+	}
+}
+
+// tryParseTimeDurationOrFloat parses time duration strings like "3d", "1h", "30m", "45s" into seconds or fallbacks to plain float parsing
+func (d DbqDataValidatorImpl) tryParseTimeDurationOrFloat(duration string) (float64, error) {
+	if len(duration) < 2 {
+		return strconv.ParseFloat(duration, 64) // Fallback to regular number parsing
+	}
+
+	// number and unit
+	numStr := duration[:len(duration)-1]
+	unit := duration[len(duration)-1:]
+
+	num, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return strconv.ParseFloat(duration, 64) // Fallback to regular number parsing
+	}
+
+	switch unit {
+	case "s": // seconds
+		return num, nil
+	case "m": // minutes
+		return num * 60, nil
+	case "h": // hours
+		return num * 3600, nil
+	case "d": // days
+		return num * 86400, nil // 24 * 60 * 60
+	default:
+		// unit is not recognized, fallback to regular number parsing
+		return strconv.ParseFloat(duration, 64)
 	}
 }

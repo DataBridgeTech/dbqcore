@@ -81,8 +81,8 @@ func TestClickhouseAdapter_InterpretDataQualityCheck(t *testing.T) {
 		{
 			name: "freshness check",
 			check: &dbqcore.DataQualityCheck{
-				Expression:  "freshness(last_updated) < 3600",
-				ParsedCheck: createMockParsedCheck("freshness", []string{"last_updated"}, "<", 3600),
+				Expression:  "freshness(last_updated) < 1h",
+				ParsedCheck: createMockParsedCheck("freshness", []string{"last_updated"}, "<", "1h"),
 			},
 			dataset:     "products",
 			whereClause: "",

@@ -98,29 +98,29 @@ func TestDbqDataValidator_RunCheck_Integration(t *testing.T) {
 			expectedPass: false,
 		},
 		{
-			name: "freshness < 3600 - pass",
+			name: "freshness < 1h - pass",
 			check: &DataQualityCheck{
-				Expression: "freshness(last_updated) < 3600",
+				Expression: "freshness(last_updated) < 1h",
 				ParsedCheck: &CheckExpression{
 					FunctionName:   "freshness",
 					Operator:       "<",
-					ThresholdValue: 3600,
+					ThresholdValue: "1h",
 				},
 			},
-			queryResult:  1800,
+			queryResult:  1800, // 30 minutes in seconds
 			expectedPass: true,
 		},
 		{
-			name: "freshness < 3600 - fail",
+			name: "freshness < 1h - fail",
 			check: &DataQualityCheck{
-				Expression: "freshness(last_updated) < 3600",
+				Expression: "freshness(last_updated) < 1h",
 				ParsedCheck: &CheckExpression{
 					FunctionName:   "freshness",
 					Operator:       "<",
-					ThresholdValue: 3600,
+					ThresholdValue: "1h",
 				},
 			},
-			queryResult:  7200,
+			queryResult:  7200, // 2 hours in seconds
 			expectedPass: false,
 		},
 	}
